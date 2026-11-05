@@ -48,7 +48,7 @@ Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to th
 |---|---|
 | Trace a number to its source; document → where it landed | Click any line or value (inspector): source page with the field highlighted; Documents → "Where it landed" |
 | Verification, links, attachments | Inspector actions: Verify, Link, Attach; **Related** panel (same source, across years, related returns) |
-| How a number was built; reconciliations; checks that don't trust the engine | Inspector "Built from"; **Independent checks**; Schedules |
+| How a number was built; reconciliations; checks that don't trust the engine | Inspector "How it was built" (sources, flows into); **Independent checks**; Schedules |
 | Large detail | **Sales detail** (filters by exception, bulk verify with one undo); Depreciation by asset |
 | Books to tax, state split | Schedules → Books to tax, State split |
 | Adjust without losing the original; live changes; since I last looked | Adjust (original kept, who/why/effect); **What changed**; presence in the top bar |
