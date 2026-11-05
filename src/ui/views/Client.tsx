@@ -19,7 +19,10 @@ export function ClientPortal() {
   const myDocs = m.p.documents.filter((d) => d.uploaded_by === 'client' && d.received_at <= clock);
   const uploads = wp.attachments.filter((a) => a.target.includes('client-upload'));
   const stage = wp.filing.frozen ? 'Filed' : approved ? 'Approved — being filed' : current ? 'Ready for your approval' : 'Your preparer is working on it';
+  const [upErr, setUpErr] = useState('');
   const upload = (f: File, target: string[]) => {
+    if (f.size > 1_500_000) return setUpErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — please keep files under 1.5 MB in this demo.`);
+    setUpErr('');
     const r = new FileReader();
     r.onload = () => act('attach', target, { name: f.name, mime: f.type, size: f.size, data: r.result, kind: 'file' });
     r.readAsDataURL(f);
@@ -78,6 +81,7 @@ export function ClientPortal() {
       </Section>
       <Section title="Your documents">
         <div className="row"><label className="drop"><input type="file" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], ['client-upload'])} />Upload a document</label></div>
+        {upErr && <div className="form-err">{upErr}</div>}
         <SimpleTable head={['Document', 'Received']} rows={[...myDocs.map((d) => [d.title, fmtDate(d.received_at)]), ...uploads.map((u) => [u.name, fmtDate(u.simAt)])]} />
         {m.p.documents.some((d) => d.id === 'D37' && d.received_at > clock) && <div className="callout amber">Still expected: Ridgeline Real Estate Fund III K-1 (usually June).</div>}
       </Section>

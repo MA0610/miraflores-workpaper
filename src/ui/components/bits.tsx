@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { useApp } from '../ctx';
-import { fmtDate } from '../../data/model';
+import { fmtDate, maskIds } from '../../data/model';
 
 export const fmt = (v: any, cents = false) => {
-  if (typeof v !== 'number') return v == null || v === '' ? '—' : String(v);
+  if (typeof v !== 'number') return v == null || v === '' ? '—' : maskIds(String(v));
   if (Math.abs(v) < 1 && v !== 0 && !cents) return v.toFixed(4);
   return v.toLocaleString('en-US', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
 };

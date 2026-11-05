@@ -105,8 +105,12 @@ export function Filing() {
               <>
                 <div className="act-row">
                   <div><b>Record payment / refund</b></div>
-                  <button className="btn sm" onClick={() => act('filing', [], { action: 'balance_paid', amount: summary.federal.balance_due, note: 'Federal balance paid by direct debit' })}>Federal balance paid</button>
-                  <button className="btn sm" onClick={() => act('filing', [], { action: 'refund_received', amount: -summary.california.balance_due, note: 'California refund deposited' })}>CA refund received</button>
+                  {([['federal', 'Federal'], ['california', 'CA']] as const).map(([j, name]) => {
+                    const bal = (frozen.snapshot.summary ?? summary)[j].balance_due;
+                    return bal > 0
+                      ? <button key={j} className="btn sm" onClick={() => act('filing', [], { action: 'balance_paid', jurisdiction: j, amount: bal, note: `${name} balance ${fmt(bal)} paid by direct debit` })}>{name} balance paid</button>
+                      : <button key={j} className="btn sm" onClick={() => act('filing', [], { action: 'refund_received', jurisdiction: j, amount: -bal, note: `${name} refund ${fmt(-bal)} deposited` })}>{name} refund received</button>;
+                  })}
                 </div>
                 <div className="act-row">
                   <div><b>Amend on top of the filed return</b><div className="tiny">The filed snapshot is never edited.</div></div>
@@ -124,7 +128,7 @@ export function Filing() {
               <HouseholdFix />
             </Section>
           )}
-          {!fe.length && depSsn?.severity === 'error' && (
+          {!fe.some((e) => e.action === 'efile_ack' && e.payload.status === 'rejected') && depSsn?.severity === 'error' && (
             <Section title="Household data"><HouseholdFix /></Section>
           )}
         </div>

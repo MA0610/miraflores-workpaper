@@ -524,7 +524,7 @@ export function runChecks(m: Model, v: Version, wp: WP, clock: string): Finding[
     const ok = current === py && (!card || card === current);
     out.push({
       id: 'dep-ssn', area: 'intake', kind: 'consistency', severity: ok ? 'pass' : 'error', blocksFiling: !ok,
-      title: ok ? `Dependent SSNs agree across organizer, prior return${card ? ' and SS card' : ''}` : `Theo’s SSN in the organizer (${theo.ssn}) differs from last year’s return (${py})`,
+      title: ok ? `Dependent SSNs agree across organizer, prior return${card ? ' and SS card' : ''}` : `Theo’s SSN in the organizer (ends ${theo.ssn.slice(-4)}) differs from last year’s return (ends ${String(py).slice(-4)})`,
       engine: current, expected: py,
       explain: ok ? `${fix ? `Corrected by ${fix.by}: ${fix.reason}` : 'All sources agree.'}` : 'The household entry was typed by the client; the 2024 return as filed (and the IRS) used a different number with the last two digits swapped. A mismatch rejects the e-file (R0000-504-02) and loses the child tax credit. Get the Social Security card and correct before filing.',
       refs: ['household:theo', 'py:/return_2024/dependents/1', ...(card ? ['D71'] : [])], lines: ['F8812.4'],
@@ -630,14 +630,14 @@ export function runChecks(m: Model, v: Version, wp: WP, clock: string): Finding[
       const d = l.value - pv;
       if (Math.abs(d) > std.and_over_amount && (pv === 0 || Math.abs(d / pv) * 100 > std.flag_if_change_over_percent)) rows.push([k, l.label, money(pv), money(l.value), money(d), pv ? `${Math.round((d / pv) * 100)}%` : 'new']);
     }
-    const explained = (k: string) => wp.notes.some((n) => n.target.includes(k)) || wp.judgments.some((j) => j.target.includes(k));
+    const explained = (k: string) => wp.notes.some((n) => n.target.includes(k)) || wp.judgments.some((j) => j.target.includes(k)) || wp.adjustments.some((a) => a.target === k);
     const open = rows.filter((r) => !explained(String(r[0])));
     out.push({
       id: 'variances', area: 'tax', kind: 'judgment', severity: open.length ? 'info' : 'pass',
       title: open.length
         ? `${open.length} of ${rows.length} lines moved more than ${std.flag_if_change_over_percent}% and ${money(std.and_over_amount)} from 2024 without an explanation`
         : `All ${rows.length} prior-year swings over ${std.flag_if_change_over_percent}% and ${money(std.and_over_amount)} explained`,
-      explain: 'Each swing needs an explanation (a note or judgment on the line). Explained swings drop off the open list.',
+      explain: 'Each swing needs an explanation (a note, judgment or adjustment on the line). Explained swings drop off the open list.',
       refs: ['D06'], lines: open.map((r) => String(r[0])),
       table: { head: ['Line', 'Label', '2024', '2025', 'Change', '%', 'Explained'], rows: rows.map((r) => [...r, explained(String(r[0])) ? '✓' : '—']) },
     });

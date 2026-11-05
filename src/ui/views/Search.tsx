@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../ctx';
+import { maskIds } from '../../data/model';
 import { fmt } from '../components/bits';
 
 export function SearchBox() {
@@ -14,7 +15,7 @@ export function SearchBox() {
     const isNum = !isNaN(n) && /\d/.test(s);
     for (const l of v.lines) if (l.key.toLowerCase().includes(s) || l.label.toLowerCase().includes(s) || (isNum && l.value === n)) out.push({ kind: 'Line', label: `${l.key} · ${l.label}`, sub: fmt(l.value), go: () => setFocus(l.key) });
     for (const d of m.p.documents) if (`${d.id} ${d.title} ${d.document_type}`.toLowerCase().includes(s)) out.push({ kind: 'Document', label: `${d.id} · ${d.title}`, sub: d.document_type, go: () => go(`#/doc/${d.id}`) });
-    for (const d of m.p.documents) for (const p of d.pages) if (p.printed_content.toLowerCase().includes(s) && out.filter((x) => x.kind === 'Page text').length < 12) out.push({ kind: 'Page text', label: `${d.id} p${p.page}`, sub: excerpt(p.printed_content, s), go: () => go(`#/doc/${d.id}/${p.page}`) });
+    for (const d of m.p.documents) for (const p of d.pages) if (p.printed_content.toLowerCase().includes(s) && out.filter((x) => x.kind === 'Page text').length < 12) out.push({ kind: 'Page text', label: `${d.id} p${p.page}`, sub: maskIds(excerpt(p.printed_content, s)), go: () => go(`#/doc/${d.id}/${p.page}`) });
     for (const e of m.p.extracted_values) if ((isNum && e.value === n) || e.id === s) out.push({ kind: 'Value', label: `${e.id} · ${e.label}`, sub: `${e.document_id} p${e.page} · ${fmt(e.value)}`, go: () => setFocus(e.id) });
     for (const x of m.p.client.questionnaire) if (`${x.id} ${x.question} ${x.answer}`.toLowerCase().includes(s)) out.push({ kind: 'Client answer', label: `${x.id} · ${x.question}`, sub: x.answer, go: () => setFocus(x.id) });
     for (const x of m.p.client.messages) if (`${x.id} ${x.text}`.toLowerCase().includes(s)) out.push({ kind: 'Message', label: `${x.id} · ${x.from}`, sub: x.text, go: () => setFocus(x.id) });

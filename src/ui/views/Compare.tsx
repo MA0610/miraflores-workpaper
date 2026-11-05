@@ -93,7 +93,12 @@ export function WhatIf() {
       <Section title="Engine alternatives (computed by the engine from v3)">
         <div className="cards">
           {alts.map((w) => {
-            const adopted = live.find((a) => a.whatIf === w.id);
+            const adopted = live.find((a) => a.whatIf === w.id) ?? (wp.judgments.some((j) => j.whatIf === w.id) && !w.changed_lines.length ? { status: 'judgment recorded' } : undefined);
+            // alternatives that set the same choice (e.g. equipment: s179 vs macrs) exclude each other
+            const clash = !adopted && alts.find((x) => x.id !== w.id && live.some((a) => a.whatIf === x.id) && Object.keys(x.choices ?? {}).some((c) => c in (w.choices ?? {})));
+            const first = w.changed_lines[0];
+            const area = first ? lineArea(m.line(v.version, first.key)!) : 'tax';
+            const judgment = { type: 'judgment' as const, target: first ? [first.key] : [], payload: { area, kind: 'election', title: w.description, decision: `Adopted: federal ${w.federal.total_tax_change}, California ${w.california.total_tax_change}.`, authority: 'Engine what-if ' + w.id, whatIf: w.id } };
             return (
               <div key={w.id} className="card">
                 <div className="row"><b>{w.description}</b></div>
@@ -103,11 +108,11 @@ export function WhatIf() {
                   <div><span className="cap">Lines changed</span>{w.changed_lines.length}</div>
                 </div>
                 <details><summary className="tiny">Changed lines</summary>{w.changed_lines.slice(0, 30).map((c: any) => <div key={c.key} className="tiny mono">{c.key}: {fmt(c.old)} → {fmt(c.new)}</div>)}</details>
-                {adopted ? <Badge tone="green">adopted ({adopted.status})</Badge> : can(me, 'adjust') && (
-                  <button className="btn sm" onClick={() => actMany([
-                    { type: 'adjust', target: [w.changed_lines[0].key], payload: { title: w.description, target: w.changed_lines[0].key, area: lineArea(m.line(v.version, w.changed_lines[0].key)!), from: w.changed_lines[0].old, to: w.changed_lines[0].new, amount: 0, category: 'manual', whatIf: w.id, reason: `Adopt engine alternative ${w.id}.` } },
-                    { type: 'judgment', target: [w.changed_lines[0].key], payload: { area: lineArea(m.line(v.version, w.changed_lines[0].key)!), kind: 'election', title: w.description, decision: `Adopted: federal ${w.federal.total_tax_change}, California ${w.california.total_tax_change}.`, authority: 'Engine what-if ' + w.id, whatIf: w.id } },
-                  ])}>Adopt as election</button>
+                {adopted ? <Badge tone="green">adopted ({adopted.status})</Badge> : clash ? <span className="tiny warn">Excludes the adopted alternative “{clash.description}” — reject that adjustment first.</span> : can(me, 'adjust') && (
+                  <button className="btn sm" onClick={() => actMany(first ? [
+                    { type: 'adjust', target: [first.key], payload: { title: w.description, target: first.key, area, from: first.old, to: first.new, amount: 0, category: 'manual', whatIf: w.id, reason: `Adopt engine alternative ${w.id}.` } },
+                    judgment,
+                  ] : [judgment])}>{first ? 'Adopt as election' : 'Record as election (no line changes)'}</button>
                 )}
               </div>
             );

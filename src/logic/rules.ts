@@ -130,8 +130,11 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
   const blockingFindings = findings.filter((f) => f.blocksFiling && findingStatus(f, wp) === 'open');
   const openFindings = findings.filter((f) => (f.severity === 'error' || f.severity === 'warning') && findingStatus(f, wp) === 'open');
   const undecided = wp.adjustments.filter((a) => a.status === 'proposed');
-  const needPartner = wp.adjustments.filter((a) => a.status === 'approved' && biggest(adjEffect(a, v, whatIfs)) > thr && !a.decisions.some((d) => d.decision === 'approved' && actor(m, d.by).role === 'partner'));
-  const docsUnaccounted = m.p.documents.filter((d) => d.received_at <= clock && !wp.dispositions.has(d.id) && !v.documents_used.includes(d.id) && !v.documents_superseded.includes(d.id));
+  const overThr = (a: Adjustment) => biggest(adjEffect(a, v, whatIfs)) > thr;
+  const needPartner = wp.adjustments.filter((a) => a.status === 'approved' && overThr(a) && !a.decisions.some((d) => d.decision === 'approved' && actor(m, d.by).role === 'partner'));
+  const undecidedPartner = undecided.filter(overThr).length;
+  const fixEvidence = new Set([...wp.householdFixes.values()].flatMap((f) => f.evidence));
+  const docsUnaccounted = m.p.documents.filter((d) => d.received_at <= clock && !wp.dispositions.has(d.id) && !fixEvidence.has(d.id) && !v.documents_used.includes(d.id) && !v.documents_superseded.includes(d.id));
   const areaStates = AREAS.map((a) => ({ a, s: signoffStates(m, v, wp, a.id, findings, clock) }));
   const reviewerMissing = areaStates.filter((x) => !x.s[1].current).map((x) => x.a.name);
   const partnerMissing = areaStates.filter((x) => !x.s[2].current).map((x) => x.a.name);
@@ -151,7 +154,7 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
     { id: 'engagement', label: 'Engagement letter and consents signed', ok: engagement, detail: 'D01, D02 signed 01/12/2026', blocking: true, go: '#/doc/D01' },
     { id: 'identity', label: 'Identity verified', ok: idv, detail: idv ? 'Driver licenses verified' : 'Verify D04 and D05', blocking: true, go: '#/area/intake' },
     { id: 'py', label: 'Prior-year return reviewed', ok: pyReviewed, detail: pyReviewed ? 'D06 reviewed' : 'Verify or disposition D06', blocking: true, go: '#/doc/D06' },
-    { id: 'docs', label: 'All documents accounted for', ok: docsUnaccounted.length === 0, detail: docsUnaccounted.length ? `${docsUnaccounted.map((d) => d.id).join(', ')} not used by the engine and not dispositioned` : 'Every document landed, was superseded, or has a recorded disposition', blocking: true, go: '#/documents' },
+    { id: 'docs', label: 'All documents accounted for', ok: docsUnaccounted.length === 0, detail: docsUnaccounted.length ? `${docsUnaccounted.map((d) => d.id).join(', ')} not used by the engine and not dispositioned` : 'Every document landed, was superseded, supports a household fix, or has a recorded disposition', blocking: true, go: '#/documents' },
     { id: 'variances', label: 'Prior-year variances explained', ok: unexplained.length === 0, detail: unexplained.length ? `${unexplained.length} swings without a note, judgment or adjustment` : 'All swings explained', blocking: true, go: '#/schedules/summary' },
     { id: 'carry', label: 'Carryovers agreed to prior year', ok: carry?.severity === 'pass', detail: carry?.title ?? '', blocking: true, go: '#/schedules/carryovers' },
     { id: 'est', label: 'Estimated payments agreed to IRS and FTB records', ok: est.every((f) => findingStatus(f, wp) !== 'open'), detail: est.map((f) => f.title).join(' · '), blocking: true, go: '#/schedules/payments' },
@@ -159,7 +162,7 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
     { id: 'diag', label: 'Diagnostics resolved', ok: diags.length === 0, detail: diags.length ? `${diags.length} engine warnings without a recorded resolution` : 'All engine warnings resolved', blocking: true, go: '#/review/diagnostics' },
     { id: 'findings', label: 'Independent checks closed', ok: openFindings.length === 0, detail: openFindings.length ? `${openFindings.length} open` : 'None open', blocking: true, go: '#/review/checks' },
     { id: 'blocking', label: 'No blocking items', ok: !openBlockingNotes.length && !blockingFindings.length, detail: [...openBlockingNotes.map((n) => `Note: ${n.text.slice(0, 60)}`), ...blockingFindings.map((f) => f.title)].join(' · ') || 'None', blocking: true, go: '#/review/notes' },
-    { id: 'adj', label: 'Adjustments decided (partner over threshold)', ok: !undecided.length && !needPartner.length, detail: undecided.length || needPartner.length ? `${undecided.length} awaiting decision, ${needPartner.length} need partner` : 'All decided', blocking: true, go: '#/review/adjustments' },
+    { id: 'adj', label: 'Adjustments decided (partner over threshold)', ok: !undecided.length && !needPartner.length, detail: undecided.length || needPartner.length ? `${undecided.length} awaiting decision (${undecidedPartner} over the partner threshold)${needPartner.length ? `, ${needPartner.length} approved without the partner` : ''}` : 'All decided', blocking: true, go: '#/review/adjustments' },
     { id: 'questions', label: 'Questions answered', ok: !openQs.length, detail: openQs.length ? `${openQs.length} open` : 'None open', blocking: false, go: '#/review/questions' },
     { id: 'reviewer', label: 'Reviewer sign-off (current)', ok: !reviewerMissing.length, detail: reviewerMissing.length ? `Missing or reopened: ${reviewerMissing.join(', ')}` : 'All areas', blocking: true, go: '#/overview' },
     { id: 'partner', label: 'Partner sign-off (current)', ok: !partnerMissing.length, detail: partnerMissing.length ? `Missing or reopened: ${partnerMissing.join(', ')}` : 'All areas', blocking: true, go: '#/overview' },

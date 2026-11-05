@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useApp } from '../ctx';
-import { areaName, fmtDate, lineArea } from '../../data/model';
+import { areaName, fmtDate, lineArea, maskIds } from '../../data/model';
 import type { Line } from '../../data/types';
-import { adjEffect } from '../../logic/effects';
-import { adjustedValue, canDecide } from '../../logic/rules';
+import { adjEffect, biggest } from '../../logic/effects';
+import { adjustedValue, canDecide, partnerThreshold } from '../../logic/rules';
 import { findingStatus } from '../../logic/checks';
 import { VERIFY_LABELS } from '../../ledger/types';
 import { Badge, Delta, Money, Person, ReasonButton, Ref, SEV_TONE, fmt } from './bits';
@@ -218,7 +218,7 @@ export function AdjCard({ id }: { id: string }) {
       {a.authority && <div className="tiny muted">Authority: {a.authority}</div>}
       {a.manualEffect && <div className="tiny muted">Effect basis: {a.manualEffect.basis}</div>}
       <div className="tiny muted">Proposed by {m.staffName(a.by)} {fmtDate(a.simAt)}{a.decisions.map((d, i) => <span key={i}> · {d.decision} by {m.staffName(d.by)} {fmtDate(d.simAt)}</span>)}</div>
-      {(me.role === 'reviewer' || me.role === 'partner') && (
+      {(a.status === 'proposed' ? me.role === 'reviewer' || me.role === 'partner' : a.status === 'approved' && me.role === 'partner' && biggest(e) > partnerThreshold(wp) && !a.decisions.some((d) => d.decision === 'approved' && m.staff.find((x) => x.id === d.by)?.role === 'partner')) && (
         <div className="row">
           {block ? <span className="tiny warn">{block}</span> : (
             <>
@@ -288,8 +288,8 @@ function EvTrace({ id }: { id: string }) {
         <div className="mono k">{id} · {e.document_id} p{e.page} · {e.field}</div>
         <h3>{e.label}</h3>
         <div className="bigvals">
-          <div><span className="cap">Extracted</span>{typeof e.value === 'number' ? <Money v={e.value} cents={e.value_type === 'money'} /> : <b>{String(e.value)}</b>}</div>
-          <div><span className="cap">Read as</span><span className="mono">“{e.text_as_read || '(blank)'}”</span></div>
+          <div><span className="cap">Extracted</span>{typeof e.value === 'number' ? <Money v={e.value} cents={e.value_type === 'money'} /> : <b>{fmt(e.value)}</b>}</div>
+          <div><span className="cap">Read as</span><span className="mono">“{maskIds(e.text_as_read || '(blank)')}”</span></div>
           <div><span className="cap">Confidence</span><span className={e.confidence < 0.8 ? 'warn' : ''}>{Math.round(e.confidence * 100)}%</span></div>
         </div>
       </div>

@@ -173,7 +173,7 @@ function Nav() {
       })}
       <div className="nav-h">Evidence</div>
       <Item h="#/documents" label="Documents" />
-      <Item h="#/sales" label="Sales detail (302)" />
+      <Item h="#/sales" label={`Sales detail (${v.lines.filter((l) => l.form === 'F8949' && !l.key.endsWith('.total')).length})`} />
       <Item h="#/schedules" label="Schedules" />
       <div className="nav-h">Work</div>
       <Item h="#/review/checks" label="Independent checks" badge={openF} tone="red" />

@@ -52,10 +52,31 @@ export function VerifyForm({ targets, onDone }: { targets: string[]; onDone?: ()
   );
 }
 
+/** Best guess at how a line's change flows to tax; the preparer can override it. */
+export function guessCategory(k: string): AdjCategory {
+  const m8949 = k.match(/^F8949\.([A-L])\./);
+  if (m8949) return 'ABCGHI'.includes(m8949[1]) ? 'stcg' : 'ltcg';
+  const rules: [RegExp, AdjCategory][] = [
+    [/^SchCA540NR/, 'ca_source_income'],
+    [/^(W2|F1040\.1[a-z]?$)/, 'wages'],
+    [/^(SchB|F1040\.(2b|3a|3b)$)/, 'interest'],
+    [/^(SchC|SchSE|F4562-C|F8829)/, 'schc_profit'],
+    [/^(SchD|F1040\.7)/, 'ltcg'],
+    [/^Sch1\.(1[1-9]|2\d)/, 'adjustment'],
+    [/^SchA\.5/, 'salt'],
+    [/^(SchA|F8283)/, 'itemized'],
+    [/^(F2441|F8812|F8863|F1040\.(19|20)$)/, 'credit_fed'],
+    [/^F1040\.(25|26|31)/, 'payment_fed'],
+    [/^(F540NR\.(7[1-9]|8\d)|FTB)/, 'payment_ca'],
+    [/^(SchE|Sch1|F1040\.8|K1)/, 'ordinary_income'],
+  ];
+  return rules.find(([re]) => re.test(k))?.[1] ?? 'ordinary_income';
+}
+
 export function AdjustForm({ target, area, from, onDone }: { target: string; area: string; from: any; onDone?: () => void }) {
   const { act, me, v, m } = useApp();
   const [to, setTo] = useState(String(from ?? ''));
-  const [category, setCategory] = useState<AdjCategory>('itemized');
+  const [category, setCategory] = useState<AdjCategory>(() => guessCategory(target));
   const [caTreatment, setCa] = useState<'rate' | 'ca_source' | 'none'>('rate');
   const [reason, setReason] = useState('');
   const [authority, setAuthority] = useState('');

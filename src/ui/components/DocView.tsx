@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '../ctx';
-import { fmtDateTime, locate } from '../../data/model';
+import { fmtDateTime, locate, maskIds } from '../../data/model';
 import type { Doc, EV } from '../../data/types';
 import { Badge, Money, Ref, Section, fmt } from './bits';
 import { AttachForm, NoteForm, VerifyForm } from './actions';
@@ -17,7 +17,7 @@ export interface PageSource {
 }
 export const simulatedSource: PageSource = {
   kind: 'simulated',
-  background: (doc, page) => <div className="paper-faint">{doc.pages.find((p) => p.page === page)?.printed_content}</div>,
+  background: (doc, page) => <div className="paper-faint">{maskIds(doc.pages.find((p) => p.page === page)?.printed_content ?? '')}</div>,
 };
 // e.g. export const imageSource: PageSource = { kind: 'image', background: (d, p) => <img src={`/docs/${d.file_name}#${p}`} /> };
 
@@ -41,7 +41,7 @@ function TextPage({ text, evs, focusEv, onPick }: { text: string; evs: EV[]; foc
         key={r.ev.id}
         id={`hl-${r.ev.id}`}
         className={'hl' + (r.ev.id === focusEv ? ' focus' : '') + (r.ev.confidence < 0.8 ? ' low' : '') + (mismatch ? ' bad' : '')}
-        title={`${r.ev.id} · ${r.ev.label} · read “${r.ev.text_as_read}” → ${String(r.ev.value)} · ${Math.round(r.ev.confidence * 100)}%`}
+        title={`${r.ev.id} · ${r.ev.label} · read “${maskIds(r.ev.text_as_read ?? '')}” → ${maskIds(String(r.ev.value))} · ${Math.round(r.ev.confidence * 100)}%`}
         onClick={() => onPick(r.ev.id)}
       >
         {text.slice(r.s, r.e)}
@@ -62,7 +62,7 @@ function LayoutPage({ doc, page, evs, focusEv, onPick, source }: { doc: Doc; pag
           key={e.id}
           className={'box' + (e.id === focusEv ? ' focus' : '') + (e.confidence < 0.8 ? ' low' : '')}
           style={{ left: `${e.position.x0 * 100}%`, top: `${e.position.y0 * 100}%`, width: `${(e.position.x1 - e.position.x0) * 100}%`, height: `${Math.max(e.position.y1 - e.position.y0, 0.012) * 100}%` }}
-          title={`${e.label}: ${e.text_as_read || '(blank)'}`}
+          title={`${e.label}: ${maskIds(e.text_as_read || '(blank)')}`}
           onClick={() => onPick(e.id)}
         >
           <span>{e.field}</span>
@@ -78,6 +78,7 @@ export function DocView({ docId, page: pageProp, focusEv }: { docId: string; pag
   const [page, setPage] = useState(pageProp ?? m.evs.get(focusEv ?? '')?.page ?? 1);
   const [mode, setMode] = useState<'text' | 'layout'>('text');
   const [panel, setPanel] = useState<'' | 'verify' | 'note' | 'attach'>('');
+  const [revealed, setRevealed] = useState(false);
   const evs = (m.evsByDoc.get(docId) ?? []).filter((e) => e.page === page);
   const landing = m.landing(docId, v.version);
   const pg = doc.pages.find((p) => p.page === page);
@@ -113,7 +114,7 @@ export function DocView({ docId, page: pageProp, focusEv }: { docId: string; pag
       <div className="doc-body">
         <div className="doc-pages">
           {doc.pages.map((p) => (
-            <button key={p.page} className={'pg' + (p.page === page ? ' on' : '') + (pagesWithVals.has(p.page) ? ' has' : '') + (many && !pagesWithVals.has(p.page) && p.page !== doc.page_count && p.page !== page ? ' dim' : '')} onClick={() => setPage(p.page)} title={p.printed_content.slice(0, 80)}>
+            <button key={p.page} className={'pg' + (p.page === page ? ' on' : '') + (pagesWithVals.has(p.page) ? ' has' : '') + (many && !pagesWithVals.has(p.page) && p.page !== doc.page_count && p.page !== page ? ' dim' : '')} onClick={() => setPage(p.page)} title={maskIds(p.printed_content.slice(0, 80))}>
               {p.page}
             </button>
           ))}
@@ -124,11 +125,12 @@ export function DocView({ docId, page: pageProp, focusEv }: { docId: string; pag
               <button className={mode === 'text' ? 'on' : ''} onClick={() => setMode('text')}>Page text</button>
               <button className={mode === 'layout' ? 'on' : ''} onClick={() => setMode('layout')}>Field layout</button>
             </div>
+            {pg && maskIds(pg.printed_content) !== pg.printed_content && (revealed ? <Badge tone="amber">identifiers shown (logged)</Badge> : me.clearance ? <button className="link tiny" onClick={() => { act('view_sensitive', [docId], { field: `page ${page} identifiers` }); setRevealed(true); }}>reveal identifiers (logged)</button> : <span className="tiny muted">identifiers masked</span>)}
             <span className="tiny muted">{mode === 'text' ? 'Simulated from printed_content; highlights are the extracted fields. Amber = low confidence, red = read differs from print.' : 'Field boxes at their extracted positions — the same overlay a scanned image or PDF would get.'}</span>
           </div>
           <div className="paper">
             <div className="paper-hd">{doc.issuer ?? doc.title.split(' - ')[0]} <span>Page {page} of {doc.page_count}</span></div>
-            {pg && (mode === 'text' ? <TextPage text={pg.printed_content} evs={evs} focusEv={focusEv ?? focus} onPick={pick} /> : <LayoutPage doc={doc} page={page} evs={evs} focusEv={focusEv ?? focus} onPick={pick} source={simulatedSource} />)}
+            {pg && (mode === 'text' ? <TextPage text={revealed ? pg.printed_content : maskIds(pg.printed_content)} evs={evs} focusEv={focusEv ?? focus} onPick={pick} /> : <LayoutPage doc={doc} page={page} evs={evs} focusEv={focusEv ?? focus} onPick={pick} source={simulatedSource} />)}
           </div>
         </div>
         <div className="doc-fields">
@@ -147,7 +149,7 @@ export function DocView({ docId, page: pageProp, focusEv }: { docId: string; pag
                       <span className="sp" />
                       <span className={'conf' + (e.confidence < 0.8 ? ' low' : '')}>{Math.round(e.confidence * 100)}%</span>
                     </div>
-                    <div className="f-val">{typeof e.value === 'number' ? <Money v={e.value} cents={e.value_type === 'money'} /> : String(e.value)} {vs ? <span className="ok">✓</span> : null}</div>
+                    <div className="f-val">{typeof e.value === 'number' ? <Money v={e.value} cents={e.value_type === 'money'} /> : fmt(e.value)} {vs ? <span className="ok">✓</span> : null}</div>
                     <div className="f-lines">{lines.length ? lines.slice(0, 4).map((k) => <Ref key={k} r={k} compact />) : <span className="tiny muted">not on the return</span>}{lines.length > 4 && <span className="tiny">+{lines.length - 4}</span>}</div>
                   </div>
                 );
@@ -201,8 +203,9 @@ export function Snippet({ evId }: { evId: string }) {
   const e = m.evs.get(evId);
   if (!e) return null;
   const d = m.docs.get(e.document_id)!;
-  const text = d.pages.find((p) => p.page === e.page)?.printed_content ?? '';
-  const r = locate(e, text);
+  const raw = d.pages.find((p) => p.page === e.page)?.printed_content ?? '';
+  const r = locate(e, raw);
+  const text = maskIds(raw);
   const s = r ? Math.max(0, r[0] - 90) : 0;
   const end = r ? Math.min(text.length, r[1] + 90) : 180;
   return (
@@ -222,7 +225,7 @@ export function Snippet({ evId }: { evId: string }) {
         {end < text.length && '…'}
       </div>
       <div className="snip-ft">
-        read “{e.text_as_read || '(blank)'}” → <b>{fmt(e.value, e.value_type === 'money')}</b> · confidence {Math.round(e.confidence * 100)}%
+        read “{maskIds(e.text_as_read || '(blank)')}” → <b>{fmt(e.value, e.value_type === 'money')}</b> · confidence {Math.round(e.confidence * 100)}%
       </div>
     </div>
   );
