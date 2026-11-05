@@ -1,6 +1,6 @@
 import type { Model } from '../data/model';
 import type { Line, Version } from '../data/types';
-import type { WP } from '../ledger/fold';
+import type { Judgment, WP } from '../ledger/fold';
 import type { AdjustPayload } from '../ledger/types';
 
 /**
@@ -21,7 +21,7 @@ export interface Finding {
   refs: string[];
   lines: string[];
   proposals?: AdjustPayload[];
-  table?: { head: string[]; rows: (string | number)[][] };
+  table?: { head: string[]; rows: (string | number)[][]; decide?: (string | null)[] };
   suggestQuestion?: { to: string; text: string };
   blocksFiling?: boolean;
 }
@@ -30,6 +30,57 @@ const CA_RES_END = '2025-07-14';
 const money = (n: number) => Math.round(n).toLocaleString('en-US');
 const num = (s: string) => Number(s.replace(/,/g, ''));
 const sumv = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+const deadline = (m: Model, re: RegExp) => m.p.firm.deadlines.find((d) => re.test(d.what))?.date ?? '';
+const usDate = (d: string) => (d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : '');
+
+/** SEP contribution above the 2025 limit: the engine's nondeductible part plus any cut to the deduction in the workpaper. */
+export function sepExcess(v: Version, wp: WP) {
+  const cut = wp.adjustments.filter((a) => a.status !== 'rejected' && a.target === 'Sch1.16').reduce((s, a) => s + Number(a.from) - Number(a.to), 0);
+  return (v.carryovers_out?.federal?.sep_contribution_not_deductible_for_2025 ?? 0) + cut;
+}
+
+export interface OutsideFiling {
+  filing: string;
+  trigger: string;
+  status: string;
+  action: string;
+  /** what the client has to do, in their words; null when nothing is asked of them */
+  client: string | null;
+  decision?: Judgment;
+}
+
+/** Filings outside this engagement, each matched to the outside-filing judgment that decides it (by title). */
+export function outsideFilings(m: Model, v: Version, wp: WP): OutsideFiling[] {
+  const L = m.lineMaps.get(v.version)!;
+  const val = (k: string) => (L.get(k)?.value as number) ?? 0;
+  const fbarDue = deadline(m, /FBAR|114/), necDue = deadline(m, /1099-NEC/), extDue = deadline(m, /Extended due/);
+  const d27 = m.docs.get('D27')?.pages.map((p) => p.printed_content).join(' ') ?? '';
+  const nec = (m.evsByDoc.get('D27') ?? []).map((e) => {
+    const last = e.field.charAt(0).toUpperCase() + e.field.slice(1);
+    return `${d27.match(new RegExp(`[A-Z][a-z]+ ${last}`))?.[0] ?? last} (${money(Number(e.value))})`;
+  });
+  const excess = sepExcess(v, wp);
+  const rows: [string, string, string, string, string | null, RegExp][] = [
+    ['FinCEN 114 (FBAR) 2025', `Max balance ${money(val('F8938.1.max'))} > 10,000`, 'Not in engagement (D01). Client filed 2024 themselves.', `Remind client; due ${usDate(fbarDue)}`,
+      `File FinCEN Form 114 (FBAR) for the Sparbanken account by ${fmtLong(fbarDue)} (we do not prepare it).`, /FBAR|FinCEN 114/i],
+    ['Form 3520 for 2023', 'Inheritance from Birgitta Lindqvist (D36: account opened 09/2023 from inheritance, > 100,000)', 'Prior preparer open item, never resolved', 'Advise client: late 3520, reasonable-cause statement',
+      'Talk to us about the 2023 Form 3520 for the inheritance from Birgitta Lindqvist.', /3520/],
+    ['Forms 1099-NEC for 2025', `Contractors paid ≥ 600: ${nec.join(', ')} (D27)`, `Due ${usDate(necDue)}, not filed (qa-23)`, 'File late now; SchC line J answered “No”',
+      `File Forms 1099-NEC for ${nec.join(' and ')} now; they were due ${fmtLong(necDue)}.`, /1099-NEC/i],
+    ['Form 5330 (SEP excess)', `SEP contribution ${money(excess)} above the limit`, 'Excise 10% unless excess withdrawn', 'Advise client before deadline',
+      excess > 0 ? `Withdraw the excess SEP-IRA contribution (${money(excess)}) and its earnings before ${fmtLong(extDue)}.` : null, /5330/],
+    ['Ada’s own 2025 return', 'Checked “can be claimed as a dependent”', 'Consistent with ODC claimed here', 'None', null, /\bAda\b/],
+    ['Woodworks 1120-S / Oregon composite', 'Oregon tax 1,580 paid on Erik’s behalf', 'No Oregon filing needed by Erik', 'Schedule S credit claimed', null, /Woodworks|Oregon/i],
+    ['Ridgeline 1065 / Arizona composite', 'AZ 27% share', 'No Arizona filing needed (D38)', 'None', null, /Ridgeline|Arizona/i],
+  ];
+  return rows.map(([filing, trigger, status, action, client, re]) => ({
+    filing, trigger, status, action, client,
+    decision: wp.judgments.filter((j) => j.kind === 'outside_filing' && re.test(j.title)).at(-1),
+  }));
+}
+
+const fmtLong = (d: string) => (d ? new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '');
 
 export function runChecks(m: Model, v: Version, wp: WP, clock: string): Finding[] {
   const L = m.lineMaps.get(v.version)!;
@@ -568,22 +619,18 @@ export function runChecks(m: Model, v: Version, wp: WP, clock: string): Finding[
 
   // ---------------- outside filings ----------------
   {
-    const maxUsd = val('F8938.1.max');
-    const rows: (string | number)[][] = [
-      ['FinCEN 114 (FBAR) 2025', `Max balance ${money(maxUsd)} > 10,000`, 'Not in engagement (D01). Client filed 2024 themselves.', 'Remind client; due 10/15/2026'],
-      ['Form 3520 for 2023', 'Inheritance from Birgitta Lindqvist (D36: account opened 09/2023 from inheritance, > 100,000)', 'Prior preparer open item, never resolved', 'Advise client: late 3520, reasonable-cause statement'],
-      ['Forms 1099-NEC for 2025', 'Two contractors ≥ 600 (D27)', 'Due 02/02/2026, not filed (qa-23)', 'File late now; SchC line J answered “No”'],
-      ['Form 5330 (SEP excess)', 'SEP contribution above the limit', 'Excise 10% unless excess withdrawn', 'Advise client before deadline'],
-      ['Ada’s own 2025 return', 'Checked “can be claimed as a dependent”', 'Consistent with ODC claimed here', 'None'],
-      ['Woodworks 1120-S / Oregon composite', 'Oregon tax 1,580 paid on Erik’s behalf', 'No Oregon filing needed by Erik', 'Schedule S credit claimed'],
-      ['Ridgeline 1065 / Arizona composite', 'AZ 27% share', 'No Arizona filing needed (D38)', 'None'],
-    ];
+    const filings = outsideFilings(m, v, wp);
+    const open = filings.filter((f) => !f.decision).length;
     out.push({
-      id: 'outside-filings', area: 'intake', kind: 'completeness', severity: 'warning',
-      title: 'Outside filings identified (7) — each needs a decision recorded',
-      explain: 'Returns and forms this engagement does not prepare but the household or related parties must file. Record a judgment for each so the file proves they were identified and communicated.',
+      id: 'outside-filings', area: 'intake', kind: 'completeness', severity: open ? 'warning' : 'pass',
+      title: open ? `Outside filings identified (${filings.length}) — ${open} without a recorded decision` : `Outside filings identified (${filings.length}) — each has a recorded decision`,
+      explain: 'Returns and forms this engagement does not prepare but the household or related parties must file. Record a decision (an outside-filing judgment) for each so the file proves they were identified and communicated.',
       refs: ['D01', 'D36', 'D27', 'qa-23', 'py:/prior_preparer_workpaper/open_items_left_by_prior_preparer/3', 'ev-0962'], lines: ['F8938.1.max', 'SchC.J'],
-      table: { head: ['Filing', 'Trigger', 'Status', 'Action'], rows },
+      table: {
+        head: ['Filing', 'Trigger', 'Status', 'Action', 'Decision'],
+        rows: filings.map((f) => [f.filing, f.trigger, f.status, f.action, f.decision ? `✓ ${m.staffName(f.decision.by)} ${f.decision.simAt.slice(0, 10)}: ${f.decision.decision}` : '—']),
+        decide: filings.map((f) => (f.decision ? null : f.filing)),
+      },
     });
   }
 

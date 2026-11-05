@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../ctx';
 import { AREAS, fmtDate, fmtDateTime } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
-import { can, readiness, ROLE_LABEL } from '../../logic/rules';
+import { can, clientSignatures, readiness, ROLE_LABEL } from '../../logic/rules';
 import { Badge, Person, Section, SimpleTable, Tabs, fmt, Sensitive } from '../components/bits';
 
 export function Firm({ tab }: { tab: string }) {
@@ -24,7 +24,7 @@ export function Firm({ tab }: { tab: string }) {
 function Status() {
   const { m, v, wp, findings, clock } = useApp();
   const gates = readiness(m, v, wp, findings, clock, m.p.what_if.alternatives);
-  const stage = wp.filing.frozen ? 'Filed' : wp.filing.events.some((e) => e.action === 'client_approved') ? 'Client approved' : wp.signoffs.some((s) => s.level === 'partner') ? 'Partner review' : wp.signoffs.some((s) => s.level === 'reviewer') ? 'In review' : wp.visible.length ? 'In preparation' : 'Not started';
+  const stage = wp.filing.frozen ? 'Filed' : clientSignatures(m, v, wp).complete ? 'Client approved' : wp.signoffs.some((s) => s.level === 'partner') ? 'Partner review' : wp.signoffs.some((s) => s.level === 'reviewer') ? 'In review' : wp.visible.length ? 'In preparation' : 'Not started';
   const hours = wp.time.reduce((s, t) => s + t.hours, 0);
   const budget = Object.values(m.p.firm.budget_hours).reduce((a, b) => a + b, 0);
   return (

@@ -13,6 +13,7 @@ export function AreaView({ id }: { id: string }) {
   const { m, v, wp, findings, clock, me, act, go } = useApp();
   const area = AREAS.find((a) => a.id === id);
   const [tab, setTab] = useState('checks');
+  const [hours, setHours] = useState('');
   if (!area) return <div className="page">Unknown area</div>;
   const fs = findings.filter((f) => f.area === id);
   const states = signoffStates(m, v, wp, id, findings, clock);
@@ -25,7 +26,6 @@ export function AreaView({ id }: { id: string }) {
   const notes = wp.notes.filter((n) => n.area === id || n.target.some((t) => lines.some((l) => l.key === t)));
   const js = wp.judgments.filter((j) => j.area === id);
   const openF = fs.filter((f) => findingStatus(f, wp) === 'open' && f.severity !== 'info' && f.severity !== 'pass');
-  const [hours, setHours] = useState('');
 
   return (
     <div className="page">

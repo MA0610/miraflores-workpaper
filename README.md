@@ -1,10 +1,10 @@
 # Workpaper — Okafor-Lindqvist 2025
 
 A web-native tax workpaper for one household's 2025 return (federal 1040 + California 540NR,
-part-year). It loads the case-study packet exactly as delivered (`public/packet.json`, never
+part-year). It loads the case-study packet (`public/packet.json`, never
 modified) and keeps all work as an append-only ledger on top of it.
 
-- **Live link:** _pending deploy_ (see [Deploy](#deploy-free-public-link-cloudflare-pages--d1))
+- **Live link:** https://okafor-lindqvist-workpaper.pages.dev
 - **Core idea and data model:** [`docs/core-idea.md`](docs/core-idea.md)
 - **Errors found, and how the design surfaced them:** [`docs/errors-found.md`](docs/errors-found.md)
 
@@ -39,7 +39,7 @@ Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to th
   adjustment → switch to reviewer (the partner threshold blocks large effects; approve as partner)
   → sign-off reopens with a diff → reviewer resolves the open HVAC review note (the firm rule "Open
   review notes block filing" is enforced) → move the clock to Jul 14 and correct Theo's SSN from the
-  card → send for approval → client signs → transmit → filed and frozen → Notice response (clock
+  card → send for approval → both clients sign (Ngozi, then Erik) → transmit → filed and frozen → Notice response (clock
   to Feb 2028) → Roll forward.
 
 ### Where each requirement lives
@@ -56,7 +56,7 @@ Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to th
 | Swings, judgments, elections, due diligence, penalties, completeness | Checks (variances, outside filings), Judgments & elections, filing gates |
 | Questions, review notes, sign-offs that reopen, roles | Ask / Note in the inspector; Review notes; area sign-offs (reopen with a diff); role switcher |
 | Assignments, deadlines, notifications | Firm → Assignments; due dates on notes/questions; 🔔 **My work** |
-| Client approval and e-file signature | Filing → Send for approval; client portal → Approve and sign |
+| Client approval and e-file signature | Filing → Send for approval; client portal → each spouse approves and signs 8879 |
 | Extensions, filing, rejections, client copy, freeze, amend | **Filing** (reject → fix → accept → frozen; amendment layer), Client copy |
 | Notice, roll forward, plan next year | **Notice response**, **Roll forward to 2026** (export + 2026 estimates) |
 | Standards, sensitive data + view log, time vs budget, status, search | **Firm** tabs; masked SSNs with logged reveal; search box |
@@ -64,7 +64,7 @@ Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to th
 
 ## Deploy (free public link): Cloudflare Pages + D1
 
-Free plan, no credit card. The built app is served as static files; `functions/api` (Pages Functions)
+The built app is served as static files; `functions/api` (Pages Functions)
 is the ledger API, backed by a D1 (SQLite) database, so work is saved and shared by everyone with the link.
 Live updates are polled every 3 s (the free plan has no long-lived connections).
 
@@ -107,11 +107,4 @@ migrations/               D1 schema
 
 ## How AI was used
 
-Built with Claude Code (Anthropic's coding agent) as a pair programmer: I set the design
-direction (ledger over read-only evidence, independent checks, sign-off hashes, season replay) and
-reviewed the output; Claude wrote most of the TypeScript/React, the seed season and the checks
-from the packet's README, and drove a real Chrome browser to test every flow end to end (filing
-reject/accept paths, client signing, partner-threshold rules, SSN masking, two-tab live sync),
-fixing the bugs that turned up. The written docs were drafted with Claude and edited by me.
-
-<!-- Edit the paragraph above so it describes exactly how you worked. -->
+I used Claude Code to build the boilerplate code and and help come up with some architectural choices concerning things on how I could better implement requirements such as sensitive data being protected and stress testing it so that it would fufill each and every requirement listed on the case study. I was in charge of designing the pipeline of the application as well as bug fixes that Claude code was struggling to implement correctly such as not overriding the data. Claude code in majority was used to test every requirement and catch any mistakes that I made regarding the implementation of the requirements.

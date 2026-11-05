@@ -25,7 +25,7 @@ import { actionable } from '../ledger/fold';
 export function App() {
   const ctx = useApp();
   const { route, me } = ctx;
-  if (me.isClient) return <Shell client><ClientPortal /></Shell>;
+  if (me.isClient) return <Shell client><ClientPortal key={me.id} /></Shell>;
   const [r0, r1, r2, r3] = route;
   let view;
   switch (r0) {

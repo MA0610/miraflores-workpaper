@@ -7,5 +7,5 @@ compatibility_date = "2025-06-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "workpaper-ledger"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "6ca9a19f-dd8b-4f46-b1d1-ef82016fb237"
 migrations_dir = "migrations"

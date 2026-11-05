@@ -54,9 +54,10 @@ export function noteBlocks(n: Note, wp: WP) {
   return n.blocking || (n.kind !== 'comment' && (wp.standards.rules as string[]).some((r) => /open review notes block filing/i.test(r)));
 }
 
+/** Parsed from the firm rule text, which the administrator owns: no rule, no partner threshold (like the notes rule). */
 export function partnerThreshold(wp: WP) {
   const r = (wp.standards.rules as string[]).find((x) => /tax effect over ([\d,]+)/.test(x));
-  return r ? Number(r.match(/over ([\d,]+)/)![1].replace(/,/g, '')) : 1000;
+  return r ? Number(r.match(/over ([\d,]+)/)![1].replace(/,/g, '')) : Infinity;
 }
 
 export function canDecide(a: Actor, adj: Adjustment, v: Version, wp: WP, whatIfs: any[]): string | null {
@@ -139,13 +140,18 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
   const overThr = (a: Adjustment) => biggest(adjEffect(a, v, whatIfs)) > thr;
   const needPartner = wp.adjustments.filter((a) => a.status === 'approved' && overThr(a) && !a.decisions.some((d) => d.decision === 'approved' && actor(m, d.by).role === 'partner'));
   const undecidedPartner = undecided.filter(overThr).length;
-  const fixEvidence = new Set([...wp.householdFixes.values()].flatMap((f) => f.evidence));
-  const docsUnaccounted = m.p.documents.filter((d) => d.received_at <= clock && !wp.dispositions.has(d.id) && !fixEvidence.has(d.id) && !v.documents_used.includes(d.id) && !v.documents_superseded.includes(d.id));
+  // Don't trust the engine's documents_used: a document is accounted for when a value from it landed on a line, it was
+  // superseded, someone recorded a disposition or verified it, or it is cited as evidence by a fix, adjustment or verification.
+  const docOf = (r: string) => (/^ev-\d+$/.test(r) ? m.evs.get(r)?.document_id : r.match(/\bD\d+\b/)?.[0]);
+  const evidence = [...wp.householdFixes.values()].flatMap((f) => f.evidence)
+    .concat(liveAdjustments(wp).flatMap((a) => a.evidence ?? []), [...wp.verifications.values()].flat().flatMap((x) => x.evidence ?? []));
+  const cited = new Set(evidence.map(docOf).filter(Boolean));
+  const landed = (id: string) => { const l = m.landing(id, v.version); return l.landed.length > 0 || l.docLevel.length > 0; };
+  const docsUnaccounted = m.p.documents.filter((d) => d.received_at <= clock && !wp.dispositions.has(d.id) && !wp.verifications.has(d.id) && !cited.has(d.id) && !landed(d.id) && !v.documents_superseded.includes(d.id));
   const areaStates = AREAS.map((a) => ({ a, s: signoffStates(m, v, wp, a.id, findings, clock) }));
   const reviewerMissing = areaStates.filter((x) => !x.s[1].current).map((x) => x.a.name);
   const partnerMissing = areaStates.filter((x) => !x.s[2].current).map((x) => x.a.name);
-  const approvals = wp.filing.events.filter((e) => e.action === 'client_approved');
-  const lastApproval = approvals.at(-1);
+  const sig = clientSignatures(m, v, wp);
   const dd = wp.judgments.some((j) => j.kind === 'due_diligence');
   const openQs = wp.questions.filter((q) => q.status === 'open');
   const engagement = m.p.documents.some((d) => d.id === 'D01') && m.p.documents.some((d) => d.id === 'D02');
@@ -160,7 +166,7 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
     { id: 'engagement', label: 'Engagement letter and consents signed', ok: engagement, detail: 'D01, D02 signed 01/12/2026', blocking: true, go: '#/doc/D01' },
     { id: 'identity', label: 'Identity verified', ok: idv, detail: idv ? 'Driver licenses verified' : 'Verify D04 and D05', blocking: true, go: '#/area/intake' },
     { id: 'py', label: 'Prior-year return reviewed', ok: pyReviewed, detail: pyReviewed ? 'D06 reviewed' : 'Verify or disposition D06', blocking: true, go: '#/doc/D06' },
-    { id: 'docs', label: 'All documents accounted for', ok: docsUnaccounted.length === 0, detail: docsUnaccounted.length ? `${docsUnaccounted.map((d) => d.id).join(', ')} not used by the engine and not dispositioned` : 'Every document landed, was superseded, supports a household fix, or has a recorded disposition', blocking: true, go: '#/documents' },
+    { id: 'docs', label: 'All documents accounted for', ok: docsUnaccounted.length === 0, detail: docsUnaccounted.length ? `${docsUnaccounted.map((d) => d.id).join(', ')} landed on no line and have no disposition, verification or evidence link` : 'Every document landed on a line, was superseded, was verified or dispositioned, or is cited as evidence', blocking: true, go: '#/documents' },
     { id: 'variances', label: 'Prior-year variances explained', ok: unexplained.length === 0, detail: unexplained.length ? `${unexplained.length} swings without a note, judgment or adjustment` : 'All swings explained', blocking: true, go: '#/schedules/summary' },
     { id: 'carry', label: 'Carryovers agreed to prior year', ok: carry?.severity === 'pass', detail: carry?.title ?? '', blocking: true, go: '#/schedules/carryovers' },
     { id: 'est', label: 'Estimated payments agreed to IRS and FTB records', ok: est.every((f) => findingStatus(f, wp) !== 'open'), detail: est.map((f) => f.title).join(' · '), blocking: true, go: '#/schedules/payments' },
@@ -172,8 +178,18 @@ export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clo
     { id: 'questions', label: 'Questions answered', ok: !openQs.length, detail: openQs.length ? `${openQs.length} open` : 'None open', blocking: false, go: '#/review/questions' },
     { id: 'reviewer', label: 'Reviewer sign-off (current)', ok: !reviewerMissing.length, detail: reviewerMissing.length ? `Missing or reopened: ${reviewerMissing.join(', ')}` : 'All areas', blocking: true, go: '#/overview' },
     { id: 'partner', label: 'Partner sign-off (current)', ok: !partnerMissing.length, detail: partnerMissing.length ? `Missing or reopened: ${partnerMissing.join(', ')}` : 'All areas', blocking: true, go: '#/overview' },
-    { id: 'client', label: 'Client approval and e-file authorization', ok: !!lastApproval && lastApproval.payload.hash === returnHash(v, wp), detail: lastApproval ? (lastApproval.payload.hash === returnHash(v, wp) ? `Signed 8879 ${lastApproval.simAt.slice(0, 10)}` : 'Return changed after the client approved — re-approval needed') : 'Not yet approved', blocking: true, go: '#/filing' },
+    { id: 'client', label: 'Client approval and e-file authorization', ok: sig.complete, detail: sig.complete ? `Signed 8879 by ${sig.signed.map((c) => c.name).join(' and ')} ${sig.last!.simAt.slice(0, 10)}` : sig.signed.length ? `Signed by ${sig.signed.map((c) => c.name).join(', ')}; waiting for ${sig.missing.map((c) => c.name).join(', ')}` : sig.stale ? 'Return changed after the client approved — re-approval needed' : 'Not yet approved', blocking: true, go: '#/filing' },
   ];
+}
+
+/** Form 8879 signatures on the return as it stands now: a joint return needs every client user (both spouses). */
+export function clientSignatures(m: Model, v: Version, wp: WP) {
+  const hash = returnHash(v, wp);
+  const all = wp.filing.events.filter((e) => e.action === 'client_approved');
+  const cur = all.filter((e) => e.payload.hash === hash);
+  const signed = m.p.firm.client_users.filter((c) => cur.some((e) => e.by === c.id));
+  const missing = m.p.firm.client_users.filter((c) => !signed.includes(c));
+  return { hash, signed, missing, complete: missing.length === 0, stale: all.length > 0 && cur.length === 0, last: cur.at(-1), byMe: (id: string) => cur.find((e) => e.by === id) };
 }
 
 /** Fingerprint of the return as it would be filed: engine version plus every live adjustment. */

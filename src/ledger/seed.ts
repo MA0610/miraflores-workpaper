@@ -117,6 +117,14 @@ export function buildSeed(m: Model): LEvent[] {
     ['Forms 1099-NEC for 2025 contractors', 'Mara Quintero 4,800 and Dev Patel 2,600 paid by ACH. Due 02/02/2026, not filed. Advised client to file now; Schedule C line J answered “No”. Outside engagement.'],
   ])
     add('2026-03-27T16:00:00Z', P, 'judgment', [], { area: 'intake', kind: 'outside_filing', title, decision, authority: 'Engagement letter D01 scope' });
+  // the rest of the outside filings, decided once v3 settled the SEP limit (before the check is closed on 07/01)
+  for (const [title, decision, authority] of [
+    ['Form 5330 for the SEP excess contribution', 'SEP 18,000 deposited 04/10/2026 (D26) against a 13,674 limit after the Schedule C corrections. Advised client 07/01 to withdraw the 4,326 excess with earnings before the extended due date; otherwise Form 5330 excise. Outside engagement.', 'IRC §4972; Form 5330 instructions'],
+    ['Ada’s own 2025 return', 'Her return checks “can be claimed as a dependent”, consistent with the ODC claimed here. No action.', 'IRC §152'],
+    ['Woodworks 1120-S / Oregon composite', 'Woodworks paid Oregon composite tax 1,580 for Erik; no separate Oregon return needed. Credit claimed on Schedule S.', 'K-1 D39; Oregon composite rules'],
+    ['Ridgeline 1065 / Arizona composite', 'Ridgeline files an Arizona composite return covering limited partners (D38); no Arizona filing needed by the household.', 'K-1 state supplement D38'],
+  ])
+    add('2026-07-01T17:30:00Z', P, 'judgment', [], { area: 'intake', kind: 'outside_filing', title, decision, authority });
   const diag = (code: string, decision: string, at: string, by = P) => add(at, by, 'judgment', [code], { area: 'tax', kind: 'diagnostic', title: `Engine diagnostic ${code}`, decision });
   diag('FORM_1099_FILING', 'Client advised to file late 1099-NECs (see outside filings).', '2026-03-27T16:10:00Z');
   diag('DUE_DILIGENCE_REQUIRED', 'Form 8867 knowledge documented 03/27.', '2026-03-27T16:11:00Z');

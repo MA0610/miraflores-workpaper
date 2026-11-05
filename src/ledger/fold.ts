@@ -85,6 +85,8 @@ export interface WP {
   findingRes: Map<string, { by: string; simAt: string; resolution: 'adjusted' | 'no_change' | 'accepted_risk' | 'question_sent'; note: string; eventId: string }>;
   signoffs: Signoff[];
   assignments: Map<string, { preparer?: string; reviewer?: string; partner?: string; due?: string }>;
+  /** who set each area role, and when (for "you were assigned" notifications) */
+  assignedBy: Map<string, { by: string; simAt: string }>;
   attachments: Attachment[];
   links: { id: string; a: string; b: string; note: string; by: string }[];
   time: { id: string; by: string; area: string; hours: number; simAt: string; note?: string }[];
@@ -128,6 +130,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
     findingRes: new Map(),
     signoffs: [],
     assignments: new Map(),
+    assignedBy: new Map(),
     attachments: [],
     links: [],
     time: [],
@@ -207,6 +210,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
       case 'assign': {
         const cur = wp.assignments.get(p.area) ?? {};
         wp.assignments.set(p.area, { ...cur, ...p.set });
+        for (const role of Object.keys(p.set)) if (role !== 'due') wp.assignedBy.set(`${p.area}.${role}`, { by: e.actor, simAt: e.simAt });
         break;
       }
       case 'attach':

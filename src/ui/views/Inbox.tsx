@@ -5,6 +5,7 @@ import { Badge, Section } from '../components/bits';
 
 const KIND: Record<InboxItem['kind'], [string, string]> = {
   decide: ['decide', 'purple'],
+  assign: ['assignment', 'blue'],
   signoff: ['sign-off', 'blue'],
   reopened: ['reopened', 'red'],
   note: ['assigned', 'amber'],

@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { actionable } from '../../ledger/fold';
 import { useApp } from '../ctx';
-import { fmtDate, fmtDateTime, lineArea } from '../../data/model';
+import { fmtDate, fmtDateTime, lineArea, maskIds } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
 import { adjustedSummary, adjEffect, sumEffects } from '../../logic/effects';
-import { adjustedValue, can, liveAdjustments, readiness, returnHash, hash } from '../../logic/rules';
+import { adjustedValue, can, clientSignatures, liveAdjustments, readiness, returnHash, hash } from '../../logic/rules';
 import { Badge, Money, Ref, Section, SimpleTable, fmt } from '../components/bits';
 import { AdjCard, AttachmentRow } from '../components/Inspector';
 import { VERIFY_LABELS } from '../../ledger/types';
+import { carriedItems, clientTodos } from '../../logic/carry';
+import { CarriedList, CarryoverTable } from './Schedules';
 
 function useFiled() {
   const { m, v, wp } = useApp();
@@ -24,8 +26,8 @@ export function Filing() {
   const { summary, lines } = useFiled();
   const fe = wp.filing.events;
   const requested = fe.filter((e) => e.action === 'approval_requested').at(-1);
-  const approved = fe.filter((e) => e.action === 'client_approved').at(-1);
-  const approvalCurrent = approved && approved.payload.hash === returnHash(v, wp);
+  const sig = clientSignatures(m, v, wp);
+  const approvalCurrent = sig.complete;
   const fedAccepted = fe.some((e) => e.action === 'efile_ack' && e.payload.jurisdiction === 'federal' && e.payload.status === 'accepted');
   const frozen = wp.filing.frozen;
   const depSsn = findings.find((f) => f.id === 'dep-ssn');
@@ -81,6 +83,7 @@ export function Filing() {
           <Section title="Actions">
             {!frozen && (
               <>
+                <ExtensionRow />
                 <div className="act-row">
                   <div><b>1. Send to the client for approval</b><div className="tiny">Locks a fingerprint of the return. Any later change invalidates the approval.</div></div>
                   {requested && requested.payload.hash === returnHash(v, wp) ? <Badge tone="green">sent {fmtDate(requested.simAt)}</Badge> : (
@@ -91,11 +94,11 @@ export function Filing() {
                 </div>
                 <div className="act-row">
                   <div><b>2. Client approves and signs Forms 8879 / FTB 8879</b><div className="tiny">In the client portal (switch role to Ngozi or Erik).</div></div>
-                  {approved ? <Badge tone={approvalCurrent ? 'green' : 'red'}>{approvalCurrent ? `signed ${fmtDate(approved.simAt)}` : 'stale — return changed after signing'}</Badge> : <Badge tone="neutral">waiting</Badge>}
+                  {sig.complete ? <Badge tone="green">both signed {fmtDate(sig.last!.simAt)}</Badge> : sig.signed.length ? <Badge tone="amber">{sig.signed.map((c) => c.name.split(' ')[0]).join(', ')} signed · waiting for {sig.missing.map((c) => c.name.split(' ')[0]).join(', ')}</Badge> : sig.stale ? <Badge tone="red">stale — return changed after signing</Badge> : <Badge tone="neutral">waiting</Badge>}
                 </div>
                 <div className="act-row">
                   <div><b>3. Transmit e-file (federal, then California)</b><div className="tiny">Paid preparer: {m.staffName(m.p.firm.firm_identity.paid_preparer_signing_returns)} · EFIN {m.p.firm.firm_identity.efin}</div></div>
-                  <button className="btn sm primary" disabled={!can(me, 'file') || !approvalCurrent || blockers.length > 0} title={!approvalCurrent ? 'Needs current client approval' : blockers.map((b) => b.label).join(', ')} onClick={transmit}>
+                  <button className="btn sm primary" disabled={!can(me, 'file') || !approvalCurrent || blockers.length > 0} title={!approvalCurrent ? 'Needs both spouses’ current signatures' : blockers.map((b) => b.label).join(', ')} onClick={transmit}>
                     Transmit
                   </button>
                 </div>
@@ -133,9 +136,20 @@ export function Filing() {
           )}
         </div>
         <div>
-          <Section title="Return to be filed (workpaper)">
-            <SimpleTable head={['', 'Federal', 'California']} rows={[['Total tax', fmt(summary.federal.total_tax), fmt(summary.california.total_tax)], ['Payments', fmt(summary.federal.payments), fmt(summary.california.payments)], ['Balance (+) / refund (−)', fmt(summary.federal.balance_due), fmt(summary.california.balance_due)], ['Fingerprint', returnHash(v, wp), '']]} num={[1, 2]} />
-          </Section>
+          {frozen ? (
+            <Section title="As filed vs amendment layer">
+              <SimpleTable
+                head={['', 'Filed federal', 'Now federal', 'Filed CA', 'Now CA']}
+                rows={([['Total tax', 'total_tax'], ['Payments', 'payments'], ['Balance (+) / refund (−)', 'balance_due']] as const).map(([l, k]) => [l, fmt(frozen.snapshot.summary.federal[k]), fmt(summary.federal[k]), fmt(frozen.snapshot.summary.california[k]), fmt(summary.california[k])])}
+                num={[1, 2, 3, 4]}
+              />
+              <div className="tiny muted">“Filed” is the frozen snapshot ({frozen.hash}); “Now” adds every live adjustment made after filing.</div>
+            </Section>
+          ) : (
+            <Section title="Return to be filed (workpaper)">
+              <SimpleTable head={['', 'Federal', 'California']} rows={[['Total tax', fmt(summary.federal.total_tax), fmt(summary.california.total_tax)], ['Payments', fmt(summary.federal.payments), fmt(summary.california.payments)], ['Balance (+) / refund (−)', fmt(summary.federal.balance_due), fmt(summary.california.balance_due)], ['Fingerprint', returnHash(v, wp), '']]} num={[1, 2]} />
+            </Section>
+          )}
           <Section title="Filing record (this workpaper)">
             {fe.length === 0 && <div className="tiny muted">Nothing filed yet.</div>}
             {fe.map((e) => <div key={e.id} className="logline"><span className="mono tiny">{e.simAt.slice(0, 16).replace('T', ' ')}</span> <b>{e.action.replace(/_/g, ' ')}</b> {e.payload.jurisdiction ?? ''} {e.payload.status ?? ''} {e.payload.note ?? ''} <span className="tiny">· {m.staffName(e.by)}</span></div>)}
@@ -146,6 +160,42 @@ export function Filing() {
           </Section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Form 4868 / FTB 3519: payment estimated from the current workpaper, balance rounded up to the next 500 (the packet's rule). */
+function ExtensionRow() {
+  const { m, wp, clock, me, act } = useApp();
+  const { summary } = useFiled();
+  const due = m.p.firm.deadlines.find((d) => /original due/i.test(d.what))?.date ?? '2026-04-15';
+  const ext = wp.filing.events.filter((e) => e.action === 'extension_filed').at(-1);
+  const est = (bal: number) => (bal > 0 ? Math.ceil(bal / 500) * 500 : 0);
+  const [fed, setFed] = useState(String(est(summary.federal.balance_due)));
+  const [ca, setCa] = useState(String(est(summary.california.balance_due)));
+  if (ext) return (
+    <div className="act-row">
+      <div><b>Extension</b><div className="tiny">{ext.payload.note}</div></div>
+      <Badge tone="green">filed {fmtDate(ext.simAt)} · 4868 {fmt(ext.payload.federal)} · 3519 {fmt(ext.payload.california)}</Badge>
+    </div>
+  );
+  const late = clock.slice(0, 10) > due;
+  const f = Number(fed), c = Number(ca);
+  const bad = !(f >= 0 && c >= 0);
+  return (
+    <div className="act-row">
+      <div>
+        <b>Extension (Form 4868 / FTB 3519)</b>
+        <div className="tiny">Due {fmtDate(due)}. Estimated from the workpaper balance (federal {fmt(summary.federal.balance_due)}, CA {fmt(summary.california.balance_due)}), rounded up to the next 500. An extension to file is not an extension to pay.</div>
+      </div>
+      <label className="tiny">4868 <input type="number" min={0} step={500} value={fed} onChange={(e) => setFed(e.target.value)} /></label>
+      <label className="tiny">3519 <input type="number" min={0} step={500} value={ca} onChange={(e) => setCa(e.target.value)} /></label>
+      <button
+        className="btn sm" disabled={!can(me, 'file') || late || bad} title={late ? `Past the original due date (${due})` : !can(me, 'file') ? 'Reviewer or partner files' : ''}
+        onClick={() => act('filing', [], { action: 'extension_filed', federal: f, california: c, note: `Form 4868 with ${fmt(f)}; FTB 3519 with ${fmt(c)} (workpaper balance federal ${fmt(summary.federal.balance_due)}, CA ${fmt(summary.california.balance_due)}).` })}
+      >
+        File extension
+      </button>
     </div>
   );
 }
@@ -205,7 +255,7 @@ export function Notice() {
       ))}
       <Section title="Response record">
         {resp.map((e) => <div key={e.id} className="logline">{fmtDate(e.simAt)} {e.payload.note} · {m.staffName(e.by)}</div>)}
-        <button className="btn sm" onClick={() => act('filing', [], { action: 'notice_response', note: `Response to ${n?.type} assembled from the frozen file (${items.length} items) and sent.` })}>Record response sent</button>
+        {!resp.length && <button className="btn sm" onClick={() => act('filing', [], { action: 'notice_response', note: `Response to ${n?.type} assembled from the frozen file (${items.length} items) and sent.` })}>Record response sent</button>}
       </Section>
     </div>
   );
@@ -214,7 +264,9 @@ export function Notice() {
 // ---------------- Roll forward ----------------
 export function RollForward() {
   const { m, v, wp, act } = useApp();
-  const { summary } = useFiled();
+  const live = useFiled().summary;
+  // plan from the return as filed; post-filing work is an amendment, not the 2025 tax
+  const summary = wp.filing.frozen?.snapshot.summary ?? live;
   const pl = m.p.planning_reference_2026;
   const fedTax = summary.federal.total_tax;
   const q = Math.ceil((fedTax * 1.1) / 4);
@@ -222,49 +274,42 @@ export function RollForward() {
   const pkg = {
     from: 'Okafor-Lindqvist 2025', generated_from_version: v.version, frozen: wp.filing.frozen?.hash ?? null,
     carryovers_out: v.carryovers_out,
-    workpaper_additions: { assets_added: wp.adjustments.some((a) => a.findingId === 'hvac' && a.status !== 'rejected') ? [{ asset_id: 'SAC-HVAC', cost: 11000, placed_in_service: '2025-08-12', life: 27.5 }] : [], iso_amt_basis: { shares: 1000, regular: 12000, amt: 52000 }, ftb_2024_credit: 3500, sep_excess_to_withdraw: true },
+    carried: carriedItems(m, v, wp),
     open_items: [...wp.notes.filter(actionable).map((n) => n.text), ...wp.judgments.filter((j) => j.kind === 'outside_filing').map((j) => `${j.title}: ${j.decision}`)],
-    judgments: wp.judgments.map((j) => ({ kind: j.kind, title: j.title, decision: j.decision, authority: j.authority })),
-    history_events: wp.visible.length,
+    judgments: wp.judgments.map((j) => ({ kind: j.kind, title: j.title, decision: j.decision, authority: j.authority, by: m.staffName(j.by), at: j.simAt })),
+    adjustments: wp.adjustments.map((a) => ({ title: a.title, target: a.target, from: a.from, to: a.to, reason: a.reason, authority: a.authority, by: m.staffName(a.by), at: a.simAt, status: a.status, layer: a.layer, decisions: a.decisions.map((d) => ({ ...d, by: m.staffName(d.by) })) })),
+    // the whole ledger (every change, who, when, why); attachment bytes left out, identifiers masked
+    history: wp.visible.map((e) => (e.type === 'attach' ? { ...e, payload: { ...e.payload, data: undefined } } : e)),
   };
   return (
     <div className="page">
       <div className="page-hd"><div><div className="eyebrow">Next year</div><h1>Roll forward to 2026</h1></div>
         <div className="row">
-          <button className="btn primary" onClick={() => { const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'okafor-lindqvist-2025-rollforward.json'; a.click(); act('filing', [], { action: 'rollforward_exported', note: 'Roll-forward package exported for the 2026 file' }); }}>Export roll-forward package</button>
+          <button className="btn primary" onClick={() => { const blob = new Blob([maskIds(JSON.stringify(pkg, null, 2))], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'okafor-lindqvist-2025-rollforward.json'; a.click(); act('filing', [], { action: 'rollforward_exported', note: 'Roll-forward package exported for the 2026 file' }); }}>Export roll-forward package</button>
         </div>
       </div>
       <div className="grid2">
-        <Section title="Carryovers to 2026 (engine)"><pre className="json">{JSON.stringify(v.carryovers_out, null, 2)}</pre></Section>
+        <div><CarryoverTable /></div>
         <Section title="Plan 2026 estimates">
           <SimpleTable head={['Due', 'Federal (110% of 2025 tax ÷ 4)']} rows={pl.federal_estimate_due_dates.map((d: string) => [d, fmt(q)])} num={[1]} />
-          <p className="tiny">{pl.federal_safe_harbor} 2025 total tax (workpaper) {fmt(fedTax)}.</p>
+          <p className="tiny">{pl.federal_safe_harbor} 2025 total tax ({wp.filing.frozen ? 'as filed' : 'workpaper'}) {fmt(fedTax)}.</p>
           <SimpleTable head={['Due', 'California installment', 'Upper bound (110% × 2025)']} rows={pl.california_estimate_due_dates.map((d: string, i: number) => [d, `${pl.california_installment_percentages[i] * 100}%`, fmt(caTax * 1.1 * pl.california_installment_percentages[i])])} num={[2]} />
           <p className="tiny">{pl.california_safe_harbor} With no residency in 2026, a 90%-of-2026 computation on the Sacramento rental and Ridgeline’s California share will be far lower — compute it before telling the client.</p>
           <ul className="tiny">{pl.known_2026_changes_for_this_household.map((x: string) => <li key={x}>{x}</li>)}</ul>
         </Section>
       </div>
-      <Section title="Carried with history">
-        <SimpleTable head={['Item', 'Detail']} rows={[
-          ['Open notes', String(pkg.open_items.length)],
-          ['Judgments and elections', String(pkg.judgments.length)],
-          ['ISO AMT basis', '1,000 Corvane shares: regular 12,000, AMT 52,000 (sale will create a negative AMT adjustment)'],
-          ['Minimum tax credit', `${fmt(v.carryovers_out.federal.minimum_tax_credit_from_2025_amt)} (Form 8801)`],
-          ['Ridgeline capital account', `${fmt(v.carryovers_out.federal.ridgeline_capital_account_end)} — compute outside basis`],
-          ['Woodworks stock basis', '0 at end of 2025: further distributions are gain'],
-          ['FTB 2024 credit', '3,500 refund requested'],
-          ['Ledger history', `${pkg.history_events} events (every change, who, why)`],
-        ]} />
-      </Section>
+      <Section title="Carried with history"><CarriedList items={pkg.carried} /></Section>
     </div>
   );
 }
 
 // ---------------- Client copy ----------------
 export function ClientCopy() {
-  const { m, wp } = useApp();
-  const { summary } = useFiled();
+  const { m, v, wp } = useApp();
+  const live = useFiled().summary;
   const f = wp.filing.frozen;
+  // the client's copy is the return as filed, never the workpaper after filing (amendments live on top)
+  const summary = f?.snapshot.summary ?? live;
   const people = m.p.household.people;
   return (
     <div className="clientcopy">
@@ -281,14 +326,7 @@ export function ClientCopy() {
       <h3>Dependents</h3>
       <SimpleTable head={['Name', 'SSN', 'Relationship']} rows={people.filter((p) => p.role === 'dependent').map((p) => [p.name, `•••-••-${(wp.householdFixes.get(`${p.id}.ssn`)?.value ?? p.ssn).slice(-4)}`, p.relationship])} />
       <h3>What you need to do</h3>
-      <ul>
-        <li>File FinCEN Form 114 (FBAR) for the Sparbanken account by October 15, 2026 (we do not prepare it).</li>
-        <li>Talk to us about the 2023 Form 3520 for the inheritance from Birgitta Lindqvist.</li>
-        <li>File Forms 1099-NEC for Mara Quintero (4,800) and Dev Patel (2,600) now; they were due February 2, 2026.</li>
-        <li>Withdraw the excess SEP-IRA contribution and its earnings before October 15, 2026.</li>
-        <li>FTB is holding your 09/15/2025 payment of 3,500 as a 2024 credit; we have asked FTB to refund it.</li>
-        <li>Keep these records for at least 7 years.</li>
-      </ul>
+      <ul>{clientTodos(m, v, wp).map((t) => <li key={t}>{t}</li>)}</ul>
       <p className="tiny">Amounts reflect the return as prepared by Miraflores. Full forms are attached in the client portal.</p>
     </div>
   );

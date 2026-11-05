@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../ctx';
 import { fmtDate } from '../../data/model';
-import { returnHash } from '../../logic/rules';
+import { clientSignatures, returnHash } from '../../logic/rules';
 import { Badge, Section, SimpleTable, fmt } from '../components/bits';
 import { ClientCopy } from './Filing';
 
@@ -19,10 +19,12 @@ export function ClientPortal() {
   const done = wp.questions.filter((q) => q.to === 'client' && q.status === 'answered');
   const req = wp.filing.events.filter((e) => e.action === 'approval_requested').at(-1);
   const current = req && req.payload.hash === returnHash(v, wp);
-  const approved = wp.filing.events.filter((e) => e.action === 'client_approved').at(-1);
+  const sig = clientSignatures(m, v, wp);
+  const mine = current ? sig.byMe(me.id) : undefined;
+  const others = sig.missing.filter((c) => c.id !== me.id).map((c) => c.name);
   const myDocs = m.p.documents.filter((d) => d.uploaded_by === 'client' && d.received_at <= clock);
   const uploads = wp.attachments.filter((a) => a.target.includes('client-upload'));
-  const stage = wp.filing.frozen ? 'Filed' : approved ? 'Approved — being filed' : current ? 'Ready for your approval' : 'Your preparer is working on it';
+  const stage = wp.filing.frozen ? 'Filed' : sig.complete ? 'Approved — being filed' : mine ? `Signed — waiting for ${others.join(', ')}` : current ? 'Ready for your approval' : 'Your preparer is working on it';
   const [upErr, setUpErr] = useState('');
   const upload = (f: File, target: string[]) => {
     if (f.size > 1_000_000) return setUpErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — please keep files under 1 MB in this demo.`);
@@ -55,7 +57,7 @@ export function ClientPortal() {
       </Section>
       <Section title="Review and sign">
         {!req && <div className="tiny muted">We will send the return for your review when it is ready.</div>}
-        {req && !current && !approved && <div className="callout amber">Your preparer changed the return after sending it; a new version is coming.</div>}
+        {req && !current && <div className="callout amber">Your preparer changed the return after sending it; a new version is coming.</div>}
         {req && current && (
           <>
             <SimpleTable head={['', 'Federal', 'California']} rows={[['Total tax', fmt(req.payload.summary.federal.total_tax), fmt(req.payload.summary.california.total_tax)], ['Already paid', fmt(req.payload.summary.federal.payments), fmt(req.payload.summary.california.payments)], ['You owe (+) / refund (−)', fmt(req.payload.summary.federal.balance_due), fmt(req.payload.summary.california.balance_due)]]} num={[1, 2]} />
@@ -66,8 +68,8 @@ export function ClientPortal() {
               ))}
               {because.map((f) => <li key={f.id}>{f.title}.</li>)}
             </ul>
-            {approved && approved.payload.hash === req.payload.hash ? (
-              <div className="callout green">Signed {fmtDate(approved.simAt)} by {m.staffName(approved.by)}. Thank you.</div>
+            {mine ? (
+              <div className="callout green">You signed {fmtDate(mine.simAt)}. {others.length ? `Waiting for ${others.join(', ')} to sign; we file once both of you have.` : 'Thank you.'}</div>
             ) : (
               <div className="form">
                 <label className="tiny"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I have examined the return and, to the best of my knowledge, it is true, correct and complete. I authorize Miraflores (ERO) to file it (Forms 8879 and FTB 8879).</label>

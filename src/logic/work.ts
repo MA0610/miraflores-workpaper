@@ -63,7 +63,7 @@ export function deadlines(m: Model, wp: WP, clock: string): Deadline[] {
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-export interface InboxItem { id: string; at: string; kind: 'decide' | 'signoff' | 'reopened' | 'note' | 'question' | 'answer' | 'mention' | 'deadline'; text: string; go: string; focus?: string; action: boolean }
+export interface InboxItem { id: string; at: string; kind: 'decide' | 'assign' | 'signoff' | 'reopened' | 'note' | 'question' | 'answer' | 'mention' | 'deadline'; text: string; go: string; focus?: string; action: boolean }
 
 /** Mentions are @FirstName (or @staff id) in a note or reply. */
 export const mentions = (m: Model, text: string) => {
@@ -80,6 +80,22 @@ export function inbox(m: Model, v: Version, wp: WP, findings: Finding[], clock: 
   const alts = m.p.what_if.alternatives;
   for (const a of wp.adjustments)
     if (a.status === 'proposed' && !canDecide(me, a, v, wp, alts)) items.push({ id: 'dec-' + a.id, at: a.simAt, kind: 'decide', text: `Decide: ${a.title} (proposed by ${m.staffName(a.by)})`, go: '#/review/adjustments', focus: a.target, action: true });
+
+  // assignments someone else gave me that still stand, one line per (assigner, moment, role)
+  const given = new Map<string, { by: string; at: string; role: string; areas: string[]; due?: string }>();
+  for (const ar of AREAS) {
+    const asg: Record<string, string | undefined> = wp.assignments.get(ar.id) ?? {};
+    for (const role of Object.keys(asg)) {
+      const set = wp.assignedBy.get(`${ar.id}.${role}`);
+      if (role === 'due' || asg[role] !== me.id || !set || set.by === me.id) continue;
+      const k = `${set.by}|${set.simAt}|${role}`;
+      const g = given.get(k) ?? { by: set.by, at: set.simAt, role, areas: [], due: asg.due };
+      g.areas.push(ar.name);
+      given.set(k, g);
+    }
+  }
+  for (const [k, g] of given)
+    items.push({ id: 'as-' + k, at: g.at, kind: 'assign', text: `${m.staffName(g.by)} assigned you as ${g.role} on ${g.areas.length > 2 ? `${g.areas.length} areas` : g.areas.join(' and ')}${g.due ? ` (preparer due ${g.due})` : ''}`, go: g.areas.length === 1 ? `#/area/${AREAS.find((a) => a.name === g.areas[0])!.id}` : '#/firm/assign', action: false });
 
   for (const ar of AREAS) {
     const asg = wp.assignments.get(ar.id) ?? {};

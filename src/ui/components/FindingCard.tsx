@@ -4,12 +4,13 @@ import { findingStatus, type Finding } from '../../logic/checks';
 import { adjEffect } from '../../logic/effects';
 import { can } from '../../logic/rules';
 import { Badge, Money, ReasonButton, Ref, SEV_TONE, SimpleTable, fmt } from './bits';
-import { QuestionForm } from './actions';
+import { JudgmentForm, QuestionForm } from './actions';
 
 export function FindingCard({ f, open: openDefault }: { f: Finding; open?: boolean }) {
   const { wp, v, m, me, actMany, act, setFocus } = useApp();
   const [open, setOpen] = useState(!!openDefault);
   const [ask, setAsk] = useState(false);
+  const [decide, setDecide] = useState<string | null>(null);
   const st = findingStatus(f, wp);
   const res = wp.findingRes.get(f.id);
   const made = wp.adjustments.filter((a) => a.findingId === f.id);
@@ -34,7 +35,18 @@ export function FindingCard({ f, open: openDefault }: { f: Finding; open?: boole
             <div><span className="cap">Kind</span>{f.kind}</div>
           </div>
           <p>{f.explain}</p>
-          {f.table && <SimpleTable head={f.table.head} rows={f.table.rows} />}
+          {f.table && (
+            <SimpleTable
+              head={f.table.head}
+              rows={f.table.decide && can(me, 'judgment')
+                ? f.table.rows.map((r, i) => {
+                    const t = f.table!.decide![i];
+                    return t ? [...r.slice(0, -1), <button key="d" className="btn sm" onClick={() => setDecide(decide === t ? null : t)}>Record decision</button>] : r;
+                  })
+                : f.table.rows}
+            />
+          )}
+          {decide && <JudgmentForm targets={[]} area={f.area} preset={{ kind: 'outside_filing', title: decide }} onDone={() => setDecide(null)} />}
           <div className="chips">
             {f.refs.map((r) => <Ref key={r} r={r} />)}
             {f.lines.slice(0, 8).map((k) => <Ref key={k} r={k} compact />)}
