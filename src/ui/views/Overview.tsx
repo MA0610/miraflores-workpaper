@@ -1,4 +1,5 @@
 import { useApp } from '../ctx';
+import { actionable } from '../../ledger/fold';
 import { AREAS, fmtDate, lineArea } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
 import { adjustedSummary } from '../../logic/effects';
@@ -73,7 +74,7 @@ export function Overview() {
         <div className="pb"><b>{verified.length}/{sourced.length}</b><span>source-backed lines verified</span></div>
         <div className="pb"><b>{checksPass}</b><span>independent checks pass</span></div>
         <div className="pb bad" onClick={() => go('#/review/checks')}><b>{open.length}</b><span>checks open</span></div>
-        <div className="pb" onClick={() => go('#/review/notes')}><b>{wp.notes.filter((n) => n.status === 'open').length}</b><span>notes open ({wp.notes.filter((n) => n.status === 'open' && n.blocking).length} blocking)</span></div>
+        <div className="pb" onClick={() => go('#/review/notes')}><b>{wp.notes.filter(actionable).length}</b><span>review notes open ({wp.notes.filter((n) => n.status === 'open' && n.blocking).length} blocking)</span></div>
         <div className="pb" onClick={() => go('#/review/adjustments')}><b>{wp.adjustments.filter((a) => a.status === 'proposed').length}</b><span>adjustments awaiting decision</span></div>
         <div className="pb" onClick={() => go('#/filing')}><b>{passed}/{gates.length}</b><span>filing gates met</span></div>
       </div>

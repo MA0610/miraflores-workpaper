@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { actionable } from '../../ledger/fold';
 import { useApp } from '../ctx';
 import { fmtDate, fmtDateTime, lineArea } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
@@ -218,7 +219,7 @@ export function RollForward() {
     from: 'Okafor-Lindqvist 2025', generated_from_version: v.version, frozen: wp.filing.frozen?.hash ?? null,
     carryovers_out: v.carryovers_out,
     workpaper_additions: { assets_added: wp.adjustments.some((a) => a.findingId === 'hvac' && a.status !== 'rejected') ? [{ asset_id: 'SAC-HVAC', cost: 11000, placed_in_service: '2025-08-12', life: 27.5 }] : [], iso_amt_basis: { shares: 1000, regular: 12000, amt: 52000 }, ftb_2024_credit: 3500, sep_excess_to_withdraw: true },
-    open_items: [...wp.notes.filter((n) => n.status === 'open').map((n) => n.text), ...wp.judgments.filter((j) => j.kind === 'outside_filing').map((j) => `${j.title}: ${j.decision}`)],
+    open_items: [...wp.notes.filter(actionable).map((n) => n.text), ...wp.judgments.filter((j) => j.kind === 'outside_filing').map((j) => `${j.title}: ${j.decision}`)],
     judgments: wp.judgments.map((j) => ({ kind: j.kind, title: j.title, decision: j.decision, authority: j.authority })),
     history_events: wp.visible.length,
   };

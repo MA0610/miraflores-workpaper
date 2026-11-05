@@ -60,6 +60,7 @@ export function AdjustForm({ target, area, from, onDone }: { target: string; are
   const [reason, setReason] = useState('');
   const [authority, setAuthority] = useState('');
   const [sign, setSign] = useState(1);
+  const [err, setErr] = useState('');
   if (!can(me, 'adjust')) return null;
   const toNum = Number(to.replace(/,/g, ''));
   const numeric = typeof from === 'number' && !isNaN(toNum);
@@ -71,7 +72,7 @@ export function AdjustForm({ target, area, from, onDone }: { target: string; are
       className="form"
       onSubmit={async (ev) => {
         ev.preventDefault();
-        if (!reason.trim()) return alert('A reason is required.');
+        if (!reason.trim()) return setErr('A reason is required.');
         await act('adjust', [target], payload);
         onDone?.();
       }}
@@ -96,6 +97,7 @@ export function AdjustForm({ target, area, from, onDone }: { target: string; are
       <div className="row effect">
         Estimated tax effect: federal <Money v={e.fedTax - e.fedPay} signed /> · California <Money v={e.caTax - e.caPay} signed />
         <span className="sp" />
+        {err && !reason.trim() && <span className="form-err">{err}</span>}
         <button className="btn primary" type="submit">Propose adjustment</button>
       </div>
     </form>
@@ -166,9 +168,11 @@ export function AttachForm({ targets, onDone }: { targets: string[]; onDone?: ()
   const { act, me } = useApp();
   const [text, setText] = useState('');
   const [name, setName] = useState('');
+  const [err, setErr] = useState('');
   if (!can(me, 'attach')) return null;
   const onFile = (f: File) => {
-    if (f.size > 1_500_000) return alert('Demo limit: 1.5 MB per file (the ledger stores it inline).');
+    if (f.size > 1_500_000) return setErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — demo limit is 1.5 MB per file (the ledger stores it inline).`);
+    setErr('');
     const r = new FileReader();
     r.onload = async () => {
       await act('attach', targets, { name: f.name, mime: f.type || 'application/octet-stream', size: f.size, data: r.result, kind: 'file' });
@@ -182,6 +186,7 @@ export function AttachForm({ targets, onDone }: { targets: string[]; onDone?: ()
         <input type="file" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         Drop or choose a file (PDF, image, email export…)
       </label>
+      {err && <div className="form-err">{err}</div>}
       <div className="row">
         <input placeholder="…or paste a message / note title" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
@@ -238,13 +243,14 @@ export function JudgmentForm({ targets, area, preset, onDone }: { targets: strin
   const [authority, setAuthority] = useState(preset?.authority ?? '');
   const [alternatives, setAlt] = useState(preset?.alternatives ?? '');
   const [whatIf, setWhatIf] = useState(preset?.whatIf ?? '');
+  const [err, setErr] = useState('');
   if (!can(me, 'judgment')) return null;
   return (
     <form
       className="form"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!authority.trim()) return alert('Firm rule: every judgment call records the authority relied on.');
+        if (!authority.trim()) return setErr('Firm rule: every judgment call records the authority relied on.');
         await act('judgment', targets, { area, kind, title, decision, authority, alternatives, whatIf: whatIf || undefined });
         onDone?.();
       }}
@@ -268,7 +274,7 @@ export function JudgmentForm({ targets, area, preset, onDone }: { targets: strin
       <textarea rows={2} placeholder="Decision and reasoning" value={decision} onChange={(e) => setDecision(e.target.value)} />
       <input placeholder="Authority relied on (required)" value={authority} onChange={(e) => setAuthority(e.target.value)} />
       <input placeholder="Alternatives considered" value={alternatives} onChange={(e) => setAlt(e.target.value)} />
-      <div className="row"><span className="sp" /><button className="btn primary" type="submit">Record</button></div>
+      <div className="row"><span className="sp" />{err && !authority.trim() && <span className="form-err">{err}</span>}<button className="btn primary" type="submit">Record</button></div>
     </form>
   );
 }

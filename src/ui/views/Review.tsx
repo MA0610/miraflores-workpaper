@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../ctx';
+import { actionable } from '../../ledger/fold';
 import { AREAS, fmtDate } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
 import { adjEffect } from '../../logic/effects';
@@ -47,10 +48,10 @@ function Checks() {
 function Notes() {
   const { wp, user } = useApp();
   const [f, setF] = useState('open');
-  const list = wp.notes.filter((n) => (f === 'open' ? n.status === 'open' : f === 'blocking' ? n.blocking && n.status === 'open' : f === 'mine' ? n.assignee === user || n.by === user : true));
+  const list = wp.notes.filter((n) => (f === 'open' ? actionable(n) : f === 'blocking' ? n.blocking && n.status === 'open' : f === 'comments' ? n.kind === 'comment' && !n.blocking && n.status === 'open' : f === 'mine' ? n.assignee === user || n.by === user : true));
   return (
     <>
-      <div className="seg">{['open', 'blocking', 'mine', 'all'].map((x) => <button key={x} className={f === x ? 'on' : ''} onClick={() => setF(x)}>{x}</button>)}</div>
+      <div className="seg">{['open', 'blocking', 'comments', 'mine', 'all'].map((x) => <button key={x} className={f === x ? 'on' : ''} onClick={() => setF(x)}>{x}</button>)}</div>
       {list.length === 0 && <div className="empty">No notes.</div>}
       {list.map((n) => <NoteThread key={n.id} n={n} />)}
     </>

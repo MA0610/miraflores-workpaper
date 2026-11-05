@@ -5,7 +5,7 @@ import { findingStatus } from '../logic/checks';
 import { ROLE_LABEL, signoffStates } from '../logic/rules';
 import { buildSeed } from '../ledger/seed';
 import { Inspector } from './components/Inspector';
-import { Person } from './components/bits';
+import { Confirm, Person } from './components/bits';
 import { Overview } from './views/Overview';
 import { AreaView } from './views/Area';
 import { Documents, DocRoute } from './views/Documents';
@@ -19,6 +19,7 @@ import { Firm } from './views/Firm';
 import { ClientPortal } from './views/Client';
 import { SearchBox } from './views/Search';
 import { TAB_ID } from '../ledger/store';
+import { actionable } from '../ledger/fold';
 
 export function App() {
   const ctx = useApp();
@@ -144,7 +145,7 @@ function TopBar() {
 function Nav() {
   const { route, wp, findings, m, v, clock, store, go } = useApp();
   const at = (h: string) => '#/' + route.slice(0, h.split('/').length).join('/') === h;
-  const openNotes = wp.notes.filter((n) => n.status === 'open').length;
+  const openNotes = wp.notes.filter(actionable).length;
   const openQ = wp.questions.filter((q) => q.status === 'open').length;
   const pendingAdj = wp.adjustments.filter((a) => a.status === 'proposed').length;
   const openF = findings.filter((f) => findingStatus(f, wp) === 'open' && f.severity !== 'info').length;
@@ -190,8 +191,8 @@ function Nav() {
       <div className="nav-h">Firm</div>
       <Item h="#/firm" label="Firm & standards" />
       <div className="nav-foot">
-        <button className="link tiny" onClick={async () => { if (confirm('Load the demo review (staff work through July 2, 2026)? This adds events to the ledger.')) { await store.reset(); await store.append(buildSeed(m)); } }}>Load demo review</button>
-        <button className="link tiny" onClick={async () => { if (confirm('Clear the whole ledger and start from the raw packet?')) await store.reset(); }}>Reset ledger</button>
+        <Confirm label="Load demo review" ask="Replace the ledger with the demo season (staff work through Jul 2, 2026)?" onYes={async () => { await store.reset(); await store.append(buildSeed(m)); }} />
+        <Confirm label="Reset ledger" ask="Clear the whole ledger and start from the raw packet?" onYes={() => store.reset()} />
       </div>
     </nav>
   );

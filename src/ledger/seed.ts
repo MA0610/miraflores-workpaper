@@ -1,6 +1,6 @@
 import { AREAS, lineArea, type Model } from '../data/model';
 import { runChecks } from '../logic/checks';
-import { areaSnapshot, hash } from '../logic/rules';
+import { areaSnapshot, snapHash } from '../logic/rules';
 import { fold } from './fold';
 import { adjEffect, biggest } from '../logic/effects';
 import type { LEvent } from './types';
@@ -138,7 +138,7 @@ export function buildSeed(m: Model): LEvent[] {
       const { v, f } = findingsAt(clock);
       const wp = fold(out, clock, std);
       const snap = areaSnapshot(m, v, wp, a, f, clock);
-      add(simAt, by, 'signoff', [a], { area: a, level, hash: hash(JSON.stringify(snap)), snapshot: snap });
+      add(simAt, by, 'signoff', [a], { area: a, level, hash: snapHash(snap), snapshot: snap });
     }
   };
 

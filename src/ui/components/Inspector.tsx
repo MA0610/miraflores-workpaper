@@ -6,7 +6,7 @@ import { adjEffect } from '../../logic/effects';
 import { adjustedValue, canDecide } from '../../logic/rules';
 import { findingStatus } from '../../logic/checks';
 import { VERIFY_LABELS } from '../../ledger/types';
-import { Badge, Delta, Money, Person, Ref, SEV_TONE, fmt } from './bits';
+import { Badge, Delta, Money, Person, ReasonButton, Ref, SEV_TONE, fmt } from './bits';
 import { AdjustForm, AttachForm, JudgmentForm, LinkForm, NoteForm, QuestionForm, VerifyForm } from './actions';
 import { Snippet } from './DocView';
 import type { Note } from '../../ledger/fold';
@@ -223,7 +223,7 @@ export function AdjCard({ id }: { id: string }) {
           {block ? <span className="tiny warn">{block}</span> : (
             <>
               <button className="btn sm primary" onClick={() => act('adjust_decision', [a.target], { adjustmentId: a.id, decision: 'approved' })}>Approve</button>
-              <button className="btn sm" onClick={() => { const note = prompt('Reason for rejecting?') ?? ''; act('adjust_decision', [a.target], { adjustmentId: a.id, decision: 'rejected', note }); }}>Reject</button>
+              <ReasonButton label="Reject" placeholder="Reason for rejecting" onSubmit={(note) => act('adjust_decision', [a.target], { adjustmentId: a.id, decision: 'rejected', note })} />
             </>
           )}
         </div>

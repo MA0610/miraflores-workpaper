@@ -89,8 +89,11 @@ export function areaSnapshot(m: Model, v: Version, wp: WP, area: string, finding
   const adjustments = liveAdjustments(wp).filter((a) => a.area === area).map((a) => `${a.id}:live:${a.to}`);
   const docs = m.p.documents.filter((d) => docArea(d) === area && d.received_at <= clock).map((d) => d.id);
   const checks = findings.filter((f) => f.area === area).map((f) => `${f.id}:${findingStatus(f, wp)}`);
-  return { version: v.version, lines, adjustments, docs, checks };
+  // titles are for reading the reopen diff only; snapHash leaves them out
+  const titles = Object.fromEntries(liveAdjustments(wp).filter((a) => a.area === area).map((a) => [a.id, a.title]));
+  return { version: v.version, lines, adjustments, docs, checks, titles };
 }
+export const snapHash = (snap: any) => hash(JSON.stringify({ ...snap, titles: undefined }));
 export function diffSnapshots(a: any, b: any): string[] {
   const out: string[] = [];
   if (!a || !b) return out;
@@ -100,8 +103,9 @@ export function diffSnapshots(a: any, b: any): string[] {
   const da = new Set(a.docs), db = new Set(b.docs);
   for (const d of db) if (!da.has(d)) out.push(`New document ${d}`);
   const aa = new Set(a.adjustments), ab = new Set(b.adjustments);
-  for (const x of ab) if (!aa.has(x)) out.push(`Adjustment ${String(x).split(':')[0]} added or changed`);
-  for (const x of aa) if (!ab.has(x) && !(Array.from(ab) as string[]).some((y) => y.startsWith(String(x).split(':')[0]))) out.push(`Adjustment ${String(x).split(':')[0]} removed`);
+  const name = (x: unknown) => { const id = String(x).split(':')[0]; const t = b.titles?.[id] ?? a.titles?.[id]; return t ? `“${t}”` : id; };
+  for (const x of ab) if (!aa.has(x)) out.push(`Adjustment ${name(x)} added or changed`);
+  for (const x of aa) if (!ab.has(x) && !(Array.from(ab) as string[]).some((y) => y.startsWith(String(x).split(':')[0]))) out.push(`Adjustment ${name(x)} removed`);
   const ca = new Set(a.checks), cb = new Set(b.checks);
   for (const x of cb) if (!ca.has(x)) out.push(`Check ${x}`);
   return out;
@@ -110,7 +114,7 @@ const fmtv = (x: any) => (typeof x === 'number' ? Math.round(x).toLocaleString()
 
 export function signoffStates(m: Model, v: Version, wp: WP, area: string, findings: Finding[], clock: string) {
   const snap = areaSnapshot(m, v, wp, area, findings, clock);
-  const h = hash(JSON.stringify(snap));
+  const h = snapHash(snap);
   return (['preparer', 'reviewer', 'partner'] as const).map((level) => {
     const s = latestSignoff(wp, area, level);
     const current = !!s && s.hash === h;

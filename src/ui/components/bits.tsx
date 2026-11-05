@@ -134,3 +134,30 @@ export function SimpleTable({ head, rows, num = [] }: { head: string[]; rows: Re
     </div>
   );
 }
+
+/** Inline replacement for confirm(): first click asks, second click runs. */
+export function Confirm({ label, ask, onYes, className = 'link tiny' }: { label: ReactNode; ask: string; onYes: () => void; className?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button className={className} onClick={() => setOpen(true)}>{label}</button>;
+  return (
+    <span className="confirm">
+      <span className="tiny">{ask}</span>
+      <button className="btn sm primary" onClick={() => { setOpen(false); onYes(); }}>Yes</button>
+      <button className="btn sm" onClick={() => setOpen(false)}>Cancel</button>
+    </span>
+  );
+}
+
+/** Inline replacement for prompt(): a button that opens a one-line reason field. */
+export function ReasonButton({ label, placeholder, onSubmit, required = true, className = 'btn sm' }: { label: ReactNode; placeholder: string; onSubmit: (text: string) => void; required?: boolean; className?: string }) {
+  const [text, setText] = useState<string | null>(null);
+  if (text === null) return <button className={className} onClick={() => setText('')}>{label}</button>;
+  const ok = !required || !!text.trim();
+  return (
+    <form className="reason" onSubmit={(e) => { e.preventDefault(); if (!ok) return; onSubmit(text.trim()); setText(null); }}>
+      <input autoFocus placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} />
+      <button className="btn sm primary" type="submit" disabled={!ok}>{label}</button>
+      <button className="btn sm" type="button" onClick={() => setText(null)}>Cancel</button>
+    </form>
+  );
+}

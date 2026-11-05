@@ -21,6 +21,8 @@ export interface Note {
   assignee?: string;
   replies: { by: string; text: string; simAt: string }[];
 }
+/** Review/quality notes and anything blocking need action; plain comments (e.g. PY variance explanations) don't. */
+export const actionable = (n: Note) => n.status === 'open' && (n.kind !== 'comment' || n.blocking);
 export interface Question {
   id: string;
   by: string;

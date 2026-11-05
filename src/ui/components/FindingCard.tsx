@@ -3,7 +3,7 @@ import { useApp } from '../ctx';
 import { findingStatus, type Finding } from '../../logic/checks';
 import { adjEffect } from '../../logic/effects';
 import { can } from '../../logic/rules';
-import { Badge, Money, Ref, SEV_TONE, SimpleTable, fmt } from './bits';
+import { Badge, Money, ReasonButton, Ref, SEV_TONE, SimpleTable, fmt } from './bits';
 import { QuestionForm } from './actions';
 
 export function FindingCard({ f, open: openDefault }: { f: Finding; open?: boolean }) {
@@ -63,15 +63,7 @@ export function FindingCard({ f, open: openDefault }: { f: Finding; open?: boole
                 </button>
               )}
               {f.suggestQuestion && <button className="btn sm" onClick={() => setAsk(!ask)}>Ask {f.suggestQuestion.to === 'client' ? 'client' : 'colleague'}</button>}
-              <button
-                className="btn sm"
-                onClick={() => {
-                  const note = prompt('Why no change is needed (kept as evidence):');
-                  if (note) act('finding_resolve', f.lines.slice(0, 3), { findingId: f.id, resolution: 'no_change', note });
-                }}
-              >
-                No change — explain
-              </button>
+              <ReasonButton label="No change — explain" placeholder="Why no change is needed (kept as evidence)" onSubmit={(note) => act('finding_resolve', f.lines.slice(0, 3), { findingId: f.id, resolution: 'no_change', note })} />
             </div>
           )}
           {res && can(me, 'adjust') && <button className="link tiny" onClick={() => act('undo', [], { ids: [res.eventId] })}>Reopen this check</button>}
