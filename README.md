@@ -4,6 +4,7 @@ A web-native tax workpaper for one household's 2025 return (federal 1040 + Calif
 part-year). It loads the case-study packet exactly as delivered (`public/packet.json`, never
 modified) and keeps all work as an append-only ledger on top of it.
 
+- **Live link:** _pending deploy_ (see [Deploy](#deploy-free-public-link-cloudflare-pages--d1))
 - **Core idea and data model:** [`docs/core-idea.md`](docs/core-idea.md)
 - **Errors found, and how the design surfaced them:** [`docs/errors-found.md`](docs/errors-found.md)
 
@@ -21,7 +22,7 @@ July 2, 2026). **Load demo review** and **Reset ledger** at the bottom of the le
 from the raw packet; both archive the old ledger rather than deleting it.
 
 Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to the server on :8787).
-`npm run typecheck` checks types.
+`npm run typecheck` checks types. `npm run cf:dev` runs the Cloudflare version locally on :8788.
 
 ### Trying it
 
@@ -35,9 +36,31 @@ Development: `npm run dev` (Vite on :5173 with hot reload, proxying `/api` to th
   mentions, questions to them, answers to their questions, and overdue or upcoming deadlines (filing
   dates, area due dates, and due dates on notes and questions).
 - Suggested path: Overview → a red check → trace a line to its source page → propose the
-  adjustment → switch to reviewer (the partner threshold blocks large effects) → sign-off reopens
-  with a diff → move the clock to Jul 14 and correct Theo's SSN from the card → client signs →
-  transmit → filed and frozen → Notice response (clock to Feb 2028) → Roll forward.
+  adjustment → switch to reviewer (the partner threshold blocks large effects; approve as partner)
+  → sign-off reopens with a diff → reviewer resolves the open HVAC review note (the firm rule "Open
+  review notes block filing" is enforced) → move the clock to Jul 14 and correct Theo's SSN from the
+  card → send for approval → client signs → transmit → filed and frozen → Notice response (clock
+  to Feb 2028) → Roll forward.
+
+### Where each requirement lives
+
+| Brief | In the app |
+|---|---|
+| Trace a number to its source; document → where it landed | Click any line or value (inspector): source page with the field highlighted; Documents → "Where it landed" |
+| Verification, links, attachments | Inspector actions: Verify, Link, Attach; **Related** panel (same source, across years, related returns) |
+| How a number was built; reconciliations; checks that don't trust the engine | Inspector "Built from"; **Independent checks**; Schedules |
+| Large detail | **Sales detail** (filters by exception, bulk verify with one undo); Depreciation by asset |
+| Books to tax, state split | Schedules → Books to tax, State split |
+| Adjust without losing the original; live changes; since I last looked | Adjust (original kept, who/why/effect); **What changed**; presence in the top bar |
+| Compare versions, what-ifs, bulk + undo | **Compare versions**, **What-ifs**, ↶ Undo (whole batch) |
+| Swings, judgments, elections, due diligence, penalties, completeness | Checks (variances, outside filings), Judgments & elections, filing gates |
+| Questions, review notes, sign-offs that reopen, roles | Ask / Note in the inspector; Review notes; area sign-offs (reopen with a diff); role switcher |
+| Assignments, deadlines, notifications | Firm → Assignments; due dates on notes/questions; 🔔 **My work** |
+| Client approval and e-file signature | Filing → Send for approval; client portal → Approve and sign |
+| Extensions, filing, rejections, client copy, freeze, amend | **Filing** (reject → fix → accept → frozen; amendment layer), Client copy |
+| Notice, roll forward, plan next year | **Notice response**, **Roll forward to 2026** (export + 2026 estimates) |
+| Standards, sensitive data + view log, time vs budget, status, search | **Firm** tabs; masked SSNs with logged reveal; search box |
+| Records a CPA expects | **Schedules** (14 records, from return summary to prior preparer vs us) |
 
 ## Deploy (free public link): Cloudflare Pages + D1
 
@@ -69,14 +92,14 @@ hosting (no API) also works: the ledger falls back to the browser's localStorage
 ```
 public/packet.json        the packet as delivered (read-only)
 src/data/model.ts         packet index: reference resolver, "where did this land", areas
-src/ledger/               event types, fold (derived state), store (server / local), demo seed
+src/ledger/               event types, fold (derived state), store (server / cloud / local), demo seed
 src/logic/checks.ts       independent checks that read evidence directly
 src/logic/effects.ts      tax effect of adjustments (rates, engine what-ifs, manual)
 src/logic/rules.ts        roles, separation of duties, partner threshold, sign-off hashes, filing gates
 src/logic/work.ts         deadlines and each person's inbox (notifications)
 src/logic/related.ts      related items across the return, years and related returns
-src/ui/                   views (overview, areas, documents, sales, schedules, review, filing,
-                          notice, roll-forward, firm, client portal) and the trace inspector
+src/ui/                   views (overview, my work, areas, documents, sales, schedules, review,
+                          filing, notice, roll-forward, firm, client portal) and the trace inspector
 server/server.mjs         zero-dependency Node server: static files, ledger, SSE live sync
 functions/api/            Cloudflare Pages Function: the same API on D1 (free hosting), polled
 migrations/               D1 schema

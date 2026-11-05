@@ -21,8 +21,11 @@ Both use an inline Yes/Cancel confirm (no browser dialogs anywhere, so automatio
 Browser-automation tip: React inputs need the native value setter + an `input` event; the role switcher is
 `.whoami select` (st-01 preparer, st-02 reviewer, st-03 partner, st-04 no clearance, st-05 admin, st-06 QR, cu-01/02 clients).
 
-Headless logic test (no browser): bundle a script with `npx esbuild <file>.ts --bundle --platform=node --format=esm`
-that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git history / scratchpad `test.ts` pattern).
+Headless logic test (no browser): write a .ts script that builds `new Model(JSON.parse(readFileSync('public/packet.json')))`,
+`fold(buildSeed(m), clock, packet.firm.starter_standards)` and `runChecks(m, m.version('v3'), wp, clock)` (also `readiness`,
+`inbox`, `deadlines`), bundle it with `npx esbuild x.ts --bundle --platform=node --format=esm --outfile=x.mjs` and run with node.
+Browser-automation tip: the extension blocks returning page text that contains ID-like digit strings (SSNs, submission
+ids); return counts/badges instead, or take a screenshot.
 
 ## Core idea / architecture
 
@@ -31,7 +34,7 @@ that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git his
   `timeline:`, line keys), reverse index `citedBy` (value → lines, "where did this document land"), `usedBy`, `locate()`
   (finds an extracted value in page text for highlighting). `AREAS` + `lineArea()`/`docArea()` map everything to 9 areas.
 - **Workpaper = append-only event ledger** over the packet (`src/ledger/types.ts`). Nothing edited in place:
-  verify, adjust (original kept), adjust_decision, note/reply/status, question/answer, judgment, finding_resolve,
+  verify, adjust (original kept), adjust_decision, note/reply/status (notes and questions may carry `due`), question/answer, judgment, finding_resolve,
   signoff, assign, attach, link, time, view_sensitive, disposition, household_fix, standards, filing, undo, seen.
   `fold.ts` derives state; undo = event (backwards walk so undo-of-undo works); batch id → one undo for bulk actions.
   Events carry `at` (wall clock) and `simAt` (season clock) — the top-bar clock replays the season; only events/docs/
@@ -44,8 +47,10 @@ that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git his
   text, sign-off = hash of area snapshot (adjusted lines, live adjustments, docs, check statuses) → reopens when it changes
   (shows diff), filing gates from `required_steps`, `returnHash` for client approval invalidation.
 - **Seed** (`src/ledger/seed.ts`): plausible staff work Mar–Jul 2 2026 built from the checks' own proposals.
-  Default clock = 2026-07-02 12:00Z. Intended demo state: only open items are C6 crypto + SEP-limit adjustments (await
-  reviewer/partner), Theo's SSN (blocking), and reviewer/partner sign-offs on intake/investments/business/tax.
+  Default clock = 2026-07-02 12:00Z. Intended demo state: open items are the C6 crypto (×2) + SEP-limit adjustments (C6
+  removal is over the partner threshold), Theo's SSN (blocking; SS card D71 arrives Jul 13), the reviewer's HVAC review note
+  (blocks filing under the firm rule), and reviewer/partner sign-offs on intake/investments/business/tax.
+  Seed ids are deterministic (`seed-0001`…), 237 events.
 - UI: `src/ui/ctx.tsx` (app context, `act`/`actMany`, presence heartbeat), `App.tsx` (top bar: clock, search, presence,
   undo, role switcher; nav), `components/` (Inspector = trace panel, DocView = simulated pages behind a `PageSource`
   interface so real PDFs/images drop in with the same position boxes, FindingCard, forms), `views/` (Overview, Area,
@@ -54,8 +59,12 @@ that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git his
 - Inbox/deadlines: `src/logic/work.ts` (derived per person; My work page `views/Inbox.tsx`, bell in top bar).
   Related items: `src/logic/related.ts` (same source, across years, related returns, team links).
   Firm rule "Open review notes block filing" is enforced via `noteBlocks()` (rules.ts) while the rule text exists.
-- Server: `server/server.mjs` — zero-dep Node http; static `dist/`, `GET/POST /api/events`, `/api/stream` SSE,
-  `/api/presence`, `/api/reset` (archives, doesn't delete).
+- Server: `server/server.mjs` — zero-dep Node http; static `dist/`, `GET /api/health` (`live`, `fresh`), `GET/POST /api/events`,
+  `/api/stream` SSE, `/api/presence`, `/api/reset` (archives to `ledger.jsonl.<ts>.bak` + writes `.used`, never deletes).
+- Cloudflare: `functions/api/[[route]].ts` — same endpoints plus `POST /api/poll` {since, epoch, me} → {epoch, events, presence};
+  D1 tables events(seq, id, epoch, body; UNIQUE(epoch,id)), meta(epoch), presence. Reset = epoch+1 (old rows kept).
+  Free-plan constraints baked in: ≤100 bound params/query (30-row inserts), client appends in chunks of 200, ~2 MB/row
+  (attachments capped at 1 MB), 100k requests/day (poll 3 s visible, 15 s hidden).
 
 ## Errors found in the packet (all surfaced by checks)
 
@@ -76,18 +85,29 @@ S corp basis roll-forward, IRA basis (client wrong, engine right), §179 electio
 
 ## Status
 
-Done (2026-11-04): all fixes and every flow in the brief browser-tested end to end in Chrome (client answer/sign,
-filing reject → SSN fix → accept/freeze → amendment, notice binder, roll-forward export, compare, what-ifs, standards
-edit, bulk verify + undo, approval rules, SSN masking + reveal log, two-tab sync/presence). Docs written:
-`README.md`, `docs/core-idea.md`, `docs/errors-found.md`. Git repo initialised.
+Done (2026-11-04):
+- Every flow in the brief browser-tested end to end in Chrome on the Node server (client answer/sign, filing reject →
+  SSN fix → accept/freeze → amendment, notice binder, roll-forward export, compare, what-ifs, standards edit, bulk verify +
+  undo, approval rules, SSN masking + reveal log, two-tab sync/presence).
+- Added after the brief audit: deadlines + My work inbox/bell, related-items panel, client-portal differences derived from
+  checks, firm rule "Open review notes block filing" enforced, auto-load demo on a fresh ledger.
+- Cloudflare backend tested locally with `npm run cf:dev` (auto-seed, two-tab polling sync + presence, reset propagation,
+  inbox notification across tabs). Not yet deployed.
+- Docs: `README.md` (run, deploy, requirement map, AI use — user should rewrite the AI paragraph), `docs/core-idea.md`,
+  `docs/errors-found.md`.
 
 Conventions worth keeping:
 - SSN-like text must go through `maskIds()` (model.ts) / `fmt()`; cleared staff reveal via a logged `view_sensitive`.
-- Sign-off snapshot `titles` are excluded from the hash (`snapHash`) — add display-only fields the same way.
-- "Actionable" notes = review/quality or blocking (`actionable()` in fold.ts); plain comments don't count as open.
+- Sign-off snapshot `titles` (adjustments and checks) are excluded from the hash (`snapHash`) — add display-only fields the same way.
+- Notes: `actionable()` (fold.ts) = counts as an open item (review/quality or blocking); `noteBlocks()` (rules.ts) = blocks
+  filing (flagged, or open review/quality note while the firm rule text exists). Plain comments are neither.
+- Inbox, deadlines and related items are derived, never stored; "read" = latest `seen` event's `simAt` (`wp.seenSim`),
+  so they replay with the season clock.
+- No browser dialogs: use `Confirm` / `ReasonButton` (bits.tsx) and inline form errors.
 
 ### To do (next)
-1. Deploy (free): user creates a Cloudflare account, then the README "Deploy" commands; paste database_id into
-   wrangler.toml. Put the resulting pages.dev link in README.
+1. Deploy (free): user creates a Cloudflare account and runs `! npx wrangler login`; then `npm run cf:db:create`
+   (paste database_id into wrangler.toml), `cf:db:migrate`, `cf:project:create`, `cf:deploy`. Put the pages.dev link
+   in README ("Live link: pending deploy").
 2. Video walkthrough (user records; suggested path in README "Trying it").
 3. Nice to have: unit tests for checks/fold/rules; page-text highlighter skips repeated values (field-aware matching).
