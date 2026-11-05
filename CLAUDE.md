@@ -14,7 +14,9 @@ npm run typecheck
 ```
 Without the server (any static host) the store falls back to localStorage + BroadcastChannel (tabs sync).
 "Load demo review" (nav footer) resets and loads the seeded season of staff work; "Reset ledger" clears it.
-Both use `confirm()` — when driving the browser via automation, stub `window.confirm/prompt/alert` first.
+Both use an inline Yes/Cancel confirm (no browser dialogs anywhere, so automation can click through).
+Browser-automation tip: React inputs need the native value setter + an `input` event; the role switcher is
+`.whoami select` (st-01 preparer, st-02 reviewer, st-03 partner, st-04 no clearance, st-05 admin, st-06 QR, cu-01/02 clients).
 
 Headless logic test (no browser): bundle a script with `npx esbuild <file>.ts --bundle --platform=node --format=esm`
 that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git history / scratchpad `test.ts` pattern).
@@ -44,7 +46,7 @@ that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git his
 - UI: `src/ui/ctx.tsx` (app context, `act`/`actMany`, presence heartbeat), `App.tsx` (top bar: clock, search, presence,
   undo, role switcher; nav), `components/` (Inspector = trace panel, DocView = simulated pages behind a `PageSource`
   interface so real PDFs/images drop in with the same position boxes, FindingCard, forms), `views/` (Overview, Area,
-  Documents, Sales (302 lots, by exception, bulk verify), Schedules (14 CPA records), Changes, Compare, WhatIf, Review,
+  Documents, Sales (295 F8949 lines in v3, by exception, bulk verify), Schedules (14 CPA records), Changes, Compare, WhatIf, Review,
   Filing/Notice/RollForward/ClientCopy, Firm, Client portal, Search). Styles: `src/styles.css`.
 - Server: `server/server.mjs` — zero-dep Node http; static `dist/`, `GET/POST /api/events`, `/api/stream` SSE,
   `/api/presence`, `/api/reset` (archives, doesn't delete).
@@ -68,25 +70,18 @@ S corp basis roll-forward, IRA basis (client wrong, engine right), §179 electio
 
 ## Status
 
-Done: everything above builds, type-checks, and the seeded overview/area/document/inspector views render correctly
-(verified in Chrome at localhost:8787).
+Done (2026-11-04): all fixes and every flow in the brief browser-tested end to end in Chrome (client answer/sign,
+filing reject → SSN fix → accept/freeze → amendment, notice binder, roll-forward export, compare, what-ifs, standards
+edit, bulk verify + undo, approval rules, SSN masking + reveal log, two-tab sync/presence). Docs written:
+`README.md`, `docs/core-idea.md`, `docs/errors-found.md`. Git repo initialised.
+
+Conventions worth keeping:
+- SSN-like text must go through `maskIds()` (model.ts) / `fmt()`; cleared staff reveal via a logged `view_sensitive`.
+- Sign-off snapshot `titles` are excluded from the hash (`snapHash`) — add display-only fields the same way.
+- "Actionable" notes = review/quality or blocking (`actionable()` in fold.ts); plain comments don't count as open.
 
 ### To do (next)
-1. **Browser-test the untested flows**: client portal answer + approve/sign; Filing send-for-approval → transmit
-   (reject path if SSN unfixed and check closed by "no change", accept path → freeze) → amendment; Notice binder;
-   Roll-forward export; Compare; What-ifs adopt; Firm standards edit (partner threshold change); Sales bulk verify + undo;
-   reviewer/partner approval rules; masked SSNs for Marcus (st-04) + view log; two tabs with different roles (live sync/presence).
-2. Fixes noticed:
-   - Nav/Overview "Review notes" badge counts the 51 seeded variance comments — count only review/quality/blocking notes
-     (or auto-resolve variance explanations).
-   - Sign-off reopen diff shows raw adjustment ids (`seed-0164`) — put titles in the snapshot.
-   - Top bar is cramped at narrow widths (clock wraps); make clock nowrap, shrink search.
-   - Page-text highlighter skips repeated values (overlap rule) — acceptable, but consider field-aware matching.
-   - Replace `alert/confirm/prompt` with inline UI (they block browser automation and look rough).
-   - `Badge` on finding "open" for info-severity variance check on every line trace is noisy.
-3. **Deliverables still owed** (brief): (a) one-page core idea + data model doc, (b) errors found + how the design
-   surfaced them (list above → write up), (c) README with run/deploy instructions and how AI was used,
-   (d) deploy to a public link (e.g. Render/Railway with `npm run build && npm start`, `DATA_DIR` for persistence),
-   (e) video walkthrough (user records; suggested script: overview → a check → trace to source page → adjust → reviewer
-   approves (partner threshold) → sign-off reopens → SSN fix → client signs → transmit/freeze → notice binder → roll forward).
-4. Nice to have: git init + commit; unit tests for checks/fold/rules.
+1. Deploy to a public link (Render/Railway, see README; needs the user's account) and put the link in the README.
+2. Video walkthrough (user records; suggested path in README "Trying it").
+3. Nice to have: unit tests for checks/fold/rules; page-text highlighter skips repeated values (field-aware matching);
+   client-portal "where the return differs" list is hand-written — derive it from findings.
