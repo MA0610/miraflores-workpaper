@@ -63,12 +63,17 @@ what_if alternatives                                                   }
   partner threshold parsed from the firm's rule text (editable by the administrator), filing
   gates from `required_steps`, and a client-approval fingerprint that goes stale when the return
   changes.
-- **Storage**: a zero-dependency Node server appends to `data/ledger.jsonl` and fans out over SSE
-  (live sync and presence). Without the server it falls back to localStorage + BroadcastChannel.
+- **Storage**: one small API with three backends. On the free public deployment it's a Cloudflare
+  Pages Function over D1, polled for live sync and presence. Locally, a zero-dependency Node server
+  appends to `data/ledger.jsonl` and pushes over SSE. With no API at all it falls back to
+  localStorage + BroadcastChannel. A reset starts a new epoch, so nothing is deleted.
+- **Notifications and deadlines are derived too**: each person's inbox (decisions waiting on them,
+  their sign-offs, assigned notes, mentions, answers, overdue items) is computed from the ledger at
+  the season clock, so it needs no extra storage and replays with the clock.
   Source pages sit behind a `PageSource` interface, so real PDFs/images can replace the simulated
   pages and keep the same field boxes.
 
 **Tradeoffs.** The engine isn't rerun: tax effects are linear estimates, and downstream lines
 aren't re-propagated, which the UI says plainly. Folding the whole ledger on every change is
 simple and fast at this size (hundreds of events), but a firm-scale system would snapshot.
-Attachments are stored inline in the ledger (1.5 MB limit) to keep the demo dependency-free.
+Attachments are stored inline in the ledger (1 MB limit) to stay within free hosting. Live sync on the free host polls every 3 s rather than pushing.

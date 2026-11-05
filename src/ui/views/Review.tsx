@@ -4,11 +4,12 @@ import { actionable } from '../../ledger/fold';
 import { AREAS, fmtDate } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
 import { adjEffect } from '../../logic/effects';
-import { canDecide } from '../../logic/rules';
+import { canDecide, noteBlocks } from '../../logic/rules';
 import { Badge, Money, Ref, Section, Tabs } from '../components/bits';
 import { FindingCard } from '../components/FindingCard';
 import { AdjCard, NoteThread } from '../components/Inspector';
 import { JudgmentForm } from '../components/actions';
+import { DueBadge } from './Inbox';
 
 export function Review({ tab }: { tab: string }) {
   const { go } = useApp();
@@ -48,7 +49,7 @@ function Checks() {
 function Notes() {
   const { wp, user } = useApp();
   const [f, setF] = useState('open');
-  const list = wp.notes.filter((n) => (f === 'open' ? actionable(n) : f === 'blocking' ? n.blocking && n.status === 'open' : f === 'comments' ? n.kind === 'comment' && !n.blocking && n.status === 'open' : f === 'mine' ? n.assignee === user || n.by === user : true));
+  const list = wp.notes.filter((n) => (f === 'open' ? actionable(n) : f === 'blocking' ? noteBlocks(n, wp) : f === 'comments' ? n.kind === 'comment' && !n.blocking && n.status === 'open' : f === 'mine' ? n.assignee === user || n.by === user : true));
   return (
     <>
       <div className="seg">{['open', 'blocking', 'comments', 'mine', 'all'].map((x) => <button key={x} className={f === x ? 'on' : ''} onClick={() => setF(x)}>{x}</button>)}</div>
@@ -68,6 +69,7 @@ function Questions() {
         <div key={q.id} className="note">
           <div className="row">
             <Badge tone={q.status === 'open' ? 'amber' : 'green'}>{q.status}</Badge>
+            {q.status === 'open' && <DueBadge due={q.due} />}
             <b>{m.staffName(q.by)} → {q.to === 'client' ? 'Client' : m.staffName(q.to)}</b>
             <span className="sp" /><span className="tiny">{fmtDate(q.simAt)}</span>
           </div>

@@ -45,7 +45,9 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/api/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      return res.end(JSON.stringify({ ok: true, events: events.length }));
+      // fresh = never used (no events and never reset): the client loads the demo season once
+      const fresh = events.length === 0 && !fs.existsSync(path.join(dataDir, '.used')) && !fs.readdirSync(dataDir).some((f) => f.startsWith('ledger.jsonl.'));
+      return res.end(JSON.stringify({ ok: true, live: 'sse', fresh, events: events.length }));
     }
     if (url.pathname === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -71,6 +73,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/reset' && req.method === 'POST') {
       // Demo convenience only: archives the ledger rather than deleting it.
       if (fs.existsSync(logFile)) fs.renameSync(logFile, `${logFile}.${Date.now()}.bak`);
+      fs.writeFileSync(path.join(dataDir, '.used'), new Date().toISOString());
       events = [];
       ids.clear();
       broadcast('reset', {});

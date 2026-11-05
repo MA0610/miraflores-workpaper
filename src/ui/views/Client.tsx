@@ -6,7 +6,11 @@ import { Badge, Section, SimpleTable, fmt } from '../components/bits';
 import { ClientCopy } from './Filing';
 
 export function ClientPortal() {
-  const { m, v, wp, me, act, clock } = useApp();
+  const { m, v, wp, me, act, clock, findings } = useApp();
+  // derived from the independent checks: what the client said vs the documents, and changes made on client-relevant evidence
+  const told = findings.find((f) => f.id === 'client-vs-docs')?.table?.rows ?? [];
+  const toldIds = new Set(told.map((r) => String(r[0])));
+  const because = findings.filter((f) => f.severity !== 'pass' && f.refs.some((r) => /^(qa|msg|call)-/.test(r) && !toldIds.has(r)) && wp.adjustments.some((a) => a.findingId === f.id && a.status !== 'rejected'));
   const [ans, setAns] = useState<Record<string, string>>({});
   const [pin, setPin] = useState('');
   const [agree, setAgree] = useState(false);
@@ -21,7 +25,7 @@ export function ClientPortal() {
   const stage = wp.filing.frozen ? 'Filed' : approved ? 'Approved — being filed' : current ? 'Ready for your approval' : 'Your preparer is working on it';
   const [upErr, setUpErr] = useState('');
   const upload = (f: File, target: string[]) => {
-    if (f.size > 1_500_000) return setUpErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — please keep files under 1.5 MB in this demo.`);
+    if (f.size > 1_000_000) return setUpErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — please keep files under 1 MB in this demo.`);
     setUpErr('');
     const r = new FileReader();
     r.onload = () => act('attach', target, { name: f.name, mime: f.type, size: f.size, data: r.result, kind: 'file' });
@@ -57,11 +61,10 @@ export function ClientPortal() {
             <SimpleTable head={['', 'Federal', 'California']} rows={[['Total tax', fmt(req.payload.summary.federal.total_tax), fmt(req.payload.summary.california.total_tax)], ['Already paid', fmt(req.payload.summary.federal.payments), fmt(req.payload.summary.california.payments)], ['You owe (+) / refund (−)', fmt(req.payload.summary.federal.balance_due), fmt(req.payload.summary.california.balance_due)]]} num={[1, 2]} />
             <h4 className="sub">Where the return differs from what you told us</h4>
             <ul className="tiny">
-              <li>You sold investments: 282 brokerage sales (mostly automatic trades in the Brightpath account) and 12 crypto sales are reported.</li>
-              <li>Your Q4 federal estimate was 3,000 (IRS record), not 4,000.</li>
-              <li>The car donation is limited to the 2,900 the charity sold it for.</li>
-              <li>Erik’s health insurance is not deductible because he could have joined Ngozi’s employer plan.</li>
-              <li>The 09/15/2025 California payment was marked for 2024; we asked FTB to refund it.</li>
+              {told.map((r) => (
+                <li key={String(r[0])}><b>{m.p.client.questionnaire.find((q) => q.id === r[0])?.question}</b> You told us “{r[1]}”. Our records: {r[2]}.</li>
+              ))}
+              {because.map((f) => <li key={f.id}>{f.title}.</li>)}
             </ul>
             {approved && approved.payload.hash === req.payload.hash ? (
               <div className="callout green">Signed {fmtDate(approved.simAt)} by {m.staffName(approved.by)}. Thank you.</div>

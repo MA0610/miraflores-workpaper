@@ -12,7 +12,10 @@ npm run build && npm start      # http://localhost:8787 — shared server mode (
 npm run dev                     # vite :5173 + server :8787 (proxy /api)
 npm run typecheck
 ```
-Without the server (any static host) the store falls back to localStorage + BroadcastChannel (tabs sync).
+Free public hosting = Cloudflare Pages + Pages Function (`functions/api/[[route]].ts`) + D1 (`migrations/`); same API,
+polled every 3 s (POST /api/poll carries presence). `npm run cf:dev` emulates it on :8788. Store picks the mode from
+`/api/health` (`live: 'sse' | 'poll'`); with no API it falls back to localStorage + BroadcastChannel (tabs sync).
+A never-used ledger (`fresh`) auto-loads the demo seed (deterministic ids → concurrent seeding is idempotent).
 "Load demo review" (nav footer) resets and loads the seeded season of staff work; "Reset ledger" clears it.
 Both use an inline Yes/Cancel confirm (no browser dialogs anywhere, so automation can click through).
 Browser-automation tip: React inputs need the native value setter + an `input` event; the role switcher is
@@ -48,6 +51,9 @@ that imports `Model`, `runChecks`, `fold`, `buildSeed`, `readiness` (see git his
   interface so real PDFs/images drop in with the same position boxes, FindingCard, forms), `views/` (Overview, Area,
   Documents, Sales (295 F8949 lines in v3, by exception, bulk verify), Schedules (14 CPA records), Changes, Compare, WhatIf, Review,
   Filing/Notice/RollForward/ClientCopy, Firm, Client portal, Search). Styles: `src/styles.css`.
+- Inbox/deadlines: `src/logic/work.ts` (derived per person; My work page `views/Inbox.tsx`, bell in top bar).
+  Related items: `src/logic/related.ts` (same source, across years, related returns, team links).
+  Firm rule "Open review notes block filing" is enforced via `noteBlocks()` (rules.ts) while the rule text exists.
 - Server: `server/server.mjs` — zero-dep Node http; static `dist/`, `GET/POST /api/events`, `/api/stream` SSE,
   `/api/presence`, `/api/reset` (archives, doesn't delete).
 
@@ -81,7 +87,7 @@ Conventions worth keeping:
 - "Actionable" notes = review/quality or blocking (`actionable()` in fold.ts); plain comments don't count as open.
 
 ### To do (next)
-1. Deploy to a public link (Render/Railway, see README; needs the user's account) and put the link in the README.
+1. Deploy (free): user creates a Cloudflare account, then the README "Deploy" commands; paste database_id into
+   wrangler.toml. Put the resulting pages.dev link in README.
 2. Video walkthrough (user records; suggested path in README "Trying it").
-3. Nice to have: unit tests for checks/fold/rules; page-text highlighter skips repeated values (field-aware matching);
-   client-portal "where the return differs" list is hand-written — derive it from findings.
+3. Nice to have: unit tests for checks/fold/rules; page-text highlighter skips repeated values (field-aware matching).

@@ -1,6 +1,6 @@
 import { AREAS, lineArea, docArea, type Model } from '../data/model';
 import type { Version } from '../data/types';
-import { latestSignoff, type Adjustment, type WP } from '../ledger/fold';
+import { latestSignoff, type Adjustment, type Note, type WP } from '../ledger/fold';
 import { adjEffect, biggest } from './effects';
 import { findingStatus, type Finding } from './checks';
 
@@ -48,6 +48,12 @@ export function canSignoff(m: Model, v: Version, wp: WP, a: Actor, area: string,
   return null;
 }
 
+/** A note blocks filing if it was flagged so, or — while the firm rule says so — if it is an open review/quality note. */
+export function noteBlocks(n: Note, wp: WP) {
+  if (n.status !== 'open') return false;
+  return n.blocking || (n.kind !== 'comment' && (wp.standards.rules as string[]).some((r) => /open review notes block filing/i.test(r)));
+}
+
 export function partnerThreshold(wp: WP) {
   const r = (wp.standards.rules as string[]).find((x) => /tax effect over ([\d,]+)/.test(x));
   return r ? Number(r.match(/over ([\d,]+)/)![1].replace(/,/g, '')) : 1000;
@@ -90,7 +96,7 @@ export function areaSnapshot(m: Model, v: Version, wp: WP, area: string, finding
   const docs = m.p.documents.filter((d) => docArea(d) === area && d.received_at <= clock).map((d) => d.id);
   const checks = findings.filter((f) => f.area === area).map((f) => `${f.id}:${findingStatus(f, wp)}`);
   // titles are for reading the reopen diff only; snapHash leaves them out
-  const titles = Object.fromEntries(liveAdjustments(wp).filter((a) => a.area === area).map((a) => [a.id, a.title]));
+  const titles = Object.fromEntries([...liveAdjustments(wp).filter((a) => a.area === area).map((a) => [a.id, a.title]), ...findings.filter((f) => f.area === area).map((f) => [f.id, f.title])]);
   return { version: v.version, lines, adjustments, docs, checks, titles };
 }
 export const snapHash = (snap: any) => hash(JSON.stringify({ ...snap, titles: undefined }));
@@ -107,7 +113,7 @@ export function diffSnapshots(a: any, b: any): string[] {
   for (const x of ab) if (!aa.has(x)) out.push(`Adjustment ${name(x)} added or changed`);
   for (const x of aa) if (!ab.has(x) && !(Array.from(ab) as string[]).some((y) => y.startsWith(String(x).split(':')[0]))) out.push(`Adjustment ${name(x)} removed`);
   const ca = new Set(a.checks), cb = new Set(b.checks);
-  for (const x of cb) if (!ca.has(x)) out.push(`Check ${x}`);
+  for (const x of cb) if (!ca.has(x)) { const [id, st] = String(x).split(':'); out.push(`Check ${name(id)} now ${st}`); }
   return out;
 }
 const fmtv = (x: any) => (typeof x === 'number' ? Math.round(x).toLocaleString() : x == null ? '—' : String(x));
@@ -126,7 +132,7 @@ export function signoffStates(m: Model, v: Version, wp: WP, area: string, findin
 export interface Gate { id: string; label: string; ok: boolean; detail: string; blocking: boolean; go?: string }
 export function readiness(m: Model, v: Version, wp: WP, findings: Finding[], clock: string, whatIfs: any[]): Gate[] {
   const thr = partnerThreshold(wp);
-  const openBlockingNotes = wp.notes.filter((n) => n.blocking && n.status === 'open');
+  const openBlockingNotes = wp.notes.filter((n) => noteBlocks(n, wp));
   const blockingFindings = findings.filter((f) => f.blocksFiling && findingStatus(f, wp) === 'open');
   const openFindings = findings.filter((f) => (f.severity === 'error' || f.severity === 'warning') && findingStatus(f, wp) === 'open');
   const undecided = wp.adjustments.filter((a) => a.status === 'proposed');

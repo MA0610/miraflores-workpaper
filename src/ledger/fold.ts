@@ -19,6 +19,7 @@ export interface Note {
   blocking: boolean;
   status: 'open' | 'resolved';
   assignee?: string;
+  due?: string; // YYYY-MM-DD
   replies: { by: string; text: string; simAt: string }[];
 }
 /** Review/quality notes and anything blocking need action; plain comments (e.g. PY variance explanations) don't. */
@@ -31,6 +32,7 @@ export interface Question {
   target: string[];
   area?: string;
   text: string;
+  due?: string;
   status: 'open' | 'answered';
   answer?: { by: string; text: string; simAt: string; attachments?: string[] };
 }
@@ -96,6 +98,7 @@ export interface WP {
     amendments: { id: string; simAt: string; by: string; reason: string }[];
   };
   seen: Map<string, string>; // actor -> real ISO time of last "seen"
+  seenSim: Map<string, string>; // actor -> season time of last "seen" (inbox read marker; replays with the clock)
 }
 
 /** Walk backwards so an undo of an undo restores the original. */
@@ -134,6 +137,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
     standards: JSON.parse(JSON.stringify(baseStandards)),
     filing: { events: [], amendments: [] },
     seen: new Map(),
+    seenSim: new Map(),
   };
   const adjById = new Map<string, Adjustment>();
   const noteById = new Map<string, Note>();
@@ -164,7 +168,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
         break;
       }
       case 'note': {
-        const n: Note = { id: e.id, by: e.actor, simAt: e.simAt, target: e.target || [], area: p.area, text: p.text, kind: p.kind || 'comment', blocking: !!p.blocking, status: 'open', assignee: p.assignee, replies: [] };
+        const n: Note = { id: e.id, by: e.actor, simAt: e.simAt, target: e.target || [], area: p.area, text: p.text, kind: p.kind || 'comment', blocking: !!p.blocking, status: 'open', assignee: p.assignee, due: p.due, replies: [] };
         wp.notes.push(n);
         noteById.set(e.id, n);
         break;
@@ -178,7 +182,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
         break;
       }
       case 'question': {
-        const q: Question = { id: e.id, by: e.actor, simAt: e.simAt, to: p.to, target: e.target || [], area: p.area, text: p.text, status: 'open' };
+        const q: Question = { id: e.id, by: e.actor, simAt: e.simAt, to: p.to, target: e.target || [], area: p.area, text: p.text, due: p.due, status: 'open' };
         wp.questions.push(q);
         qById.set(e.id, q);
         break;
@@ -233,6 +237,7 @@ export function fold(all: LEvent[], clock: string, baseStandards: any): WP {
         break;
       case 'seen':
         wp.seen.set(e.actor, e.at);
+        wp.seenSim.set(e.actor, e.simAt);
         break;
     }
   }

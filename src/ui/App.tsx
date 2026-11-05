@@ -18,6 +18,7 @@ import { Filing, Notice, RollForward, ClientCopy } from './views/Filing';
 import { Firm } from './views/Firm';
 import { ClientPortal } from './views/Client';
 import { SearchBox } from './views/Search';
+import { Inbox, useInbox } from './views/Inbox';
 import { TAB_ID } from '../ledger/store';
 import { actionable } from '../ledger/fold';
 
@@ -42,6 +43,7 @@ export function App() {
     case 'rollforward': view = <RollForward />; break;
     case 'clientcopy': view = <ClientCopy />; break;
     case 'firm': view = <Firm tab={r1 || 'status'} />; break;
+    case 'inbox': view = <Inbox />; break;
     default: view = <Overview />;
   }
   return <Shell>{view}</Shell>;
@@ -112,6 +114,7 @@ function TopBar() {
           <span key={p.tab} title={`${m.staffName(p.user)} · ${p.view}${p.focus ? ' · ' + p.focus : ''}`}><Person id={p.user} small /></span>
         ))}
       </div>
+      {!me.isClient && <Bell />}
       <button className="btn sm ghost" onClick={() => go('#/changes')} title="Changes since you last looked">
         ● {unseen}
       </button>
@@ -136,9 +139,21 @@ function TopBar() {
             {m.p.firm.client_users.map((c) => <option key={c.id} value={c.id}>{c.name} — Client</option>)}
           </optgroup>
         </select>
-        <span className="tiny muted">{store.mode === 'server' ? 'shared server' : 'this browser · tabs sync'}</span>
+        <span className="tiny muted">{store.mode === 'local' ? 'this browser · tabs sync' : 'shared · live'}</span>
       </div>
     </header>
+  );
+}
+
+function Bell() {
+  const { go } = useApp();
+  const { items, isNew, open } = useInbox();
+  const fresh = items.some(isNew);
+  return (
+    <button className="btn sm ghost bell" onClick={() => go('#/inbox')} title={`${open} waiting on you${fresh ? ' · new notifications' : ''}`}>
+      🔔 {open}
+      {fresh && <span className="dot" />}
+    </button>
   );
 }
 
@@ -155,9 +170,11 @@ function Nav() {
       {badge ? <span className={`nb ${tone ?? ''}`}>{badge}</span> : null}
     </a>
   );
+  const { open: myOpen } = useInbox();
   return (
     <nav className="nav">
       <Item h="#/overview" label="Overview" />
+      <Item h="#/inbox" label="My work" badge={myOpen} tone="red" />
       <div className="nav-h">Areas</div>
       {AREAS.map((a) => {
         const s = signoffStates(m, v, wp, a.id, findings, clock);
@@ -193,6 +210,7 @@ function Nav() {
       <div className="nav-foot">
         <Confirm label="Load demo review" ask="Replace the ledger with the demo season (staff work through Jul 2, 2026)?" onYes={async () => { await store.reset(); await store.append(buildSeed(m)); }} />
         <Confirm label="Reset ledger" ask="Clear the whole ledger and start from the raw packet?" onYes={() => store.reset()} />
+        {store.mode !== 'local' && <span className="tiny muted">Shared demo: everyone with this link works in one ledger, so a reset affects everyone. Roles are per tab.</span>}
       </div>
     </nav>
   );

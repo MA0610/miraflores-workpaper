@@ -3,9 +3,11 @@ import { actionable } from '../../ledger/fold';
 import { AREAS, fmtDate, lineArea } from '../../data/model';
 import { findingStatus } from '../../logic/checks';
 import { adjustedSummary } from '../../logic/effects';
-import { adjustedValue, readiness, signoffStates } from '../../logic/rules';
+import { adjustedValue, noteBlocks, readiness, signoffStates } from '../../logic/rules';
 import { Badge, Delta, Money, Person, Section, SEV_TONE } from '../components/bits';
 import { FindingCard } from '../components/FindingCard';
+import { deadlines as allDeadlines } from '../../logic/work';
+import { DeadlineRow } from './Inbox';
 
 export function Overview() {
   const { m, v, wp, findings, eff, clock, go } = useApp();
@@ -20,7 +22,9 @@ export function Overview() {
   const sourced = v.lines.filter((l) => l.sources.length > 0);
   const verified = sourced.filter((l) => wp.verifications.has(l.key) || l.sources.every((s) => wp.verifications.has(s)));
   const checksPass = findings.filter((f) => f.severity === 'pass').length;
-  const deadlines = m.p.firm.deadlines.filter((d) => d.date >= clock.slice(0, 10)).slice(0, 4);
+  const dls = allDeadlines(m, wp, clock);
+  const deadlines = [...dls.filter((d) => d.state === 'overdue'), ...dls.filter((d) => d.state === 'soon' || d.state === 'upcoming')].slice(0, 6);
+  const overdue = dls.filter((d) => d.state === 'overdue').length;
 
   const card = (title: string, rows: [string, number, number, number | undefined][]) => (
     <div className="sumcard">
@@ -74,7 +78,7 @@ export function Overview() {
         <div className="pb"><b>{verified.length}/{sourced.length}</b><span>source-backed lines verified</span></div>
         <div className="pb"><b>{checksPass}</b><span>independent checks pass</span></div>
         <div className="pb bad" onClick={() => go('#/review/checks')}><b>{open.length}</b><span>checks open</span></div>
-        <div className="pb" onClick={() => go('#/review/notes')}><b>{wp.notes.filter(actionable).length}</b><span>review notes open ({wp.notes.filter((n) => n.status === 'open' && n.blocking).length} blocking)</span></div>
+        <div className="pb" onClick={() => go('#/review/notes')}><b>{wp.notes.filter(actionable).length}</b><span>review notes open ({wp.notes.filter((n) => noteBlocks(n, wp)).length} blocking)</span></div>
         <div className="pb" onClick={() => go('#/review/adjustments')}><b>{wp.adjustments.filter((a) => a.status === 'proposed').length}</b><span>adjustments awaiting decision</span></div>
         <div className="pb" onClick={() => go('#/filing')}><b>{passed}/{gates.length}</b><span>filing gates met</span></div>
       </div>
@@ -111,7 +115,7 @@ export function Overview() {
             </table>
             <div className="tiny muted">↺ = signed, then what was signed changed (new engine version, document, adjustment or check). Hover for what changed.</div>
           </Section>
-          <Section title="Team & deadlines">
+          <Section title="Team & deadlines" right={overdue ? <Badge tone="red">{overdue} overdue</Badge> : undefined}>
             {AREAS.slice(0, 1).map(() => {
               const a = wp.assignments.get('intake') ?? {};
               return (
@@ -123,7 +127,8 @@ export function Overview() {
                 </div>
               );
             })}
-            {deadlines.map((d) => <div key={d.what} className="logline"><span className="mono">{d.date}</span> {d.what}</div>)}
+            {deadlines.map((d) => <DeadlineRow key={d.id} d={d} />)}
+            {dls.some((d) => d.state === 'done') && <div className="tiny muted">{dls.filter((d) => d.state === 'done').length} deadlines met</div>}
           </Section>
           <Section title="Engine diagnostics">
             {v.diagnostics.map((d) => {

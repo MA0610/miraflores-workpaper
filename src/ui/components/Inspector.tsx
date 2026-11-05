@@ -3,10 +3,12 @@ import { useApp } from '../ctx';
 import { areaName, fmtDate, lineArea, maskIds } from '../../data/model';
 import type { Line } from '../../data/types';
 import { adjEffect, biggest } from '../../logic/effects';
-import { adjustedValue, canDecide, partnerThreshold } from '../../logic/rules';
+import { adjustedValue, canDecide, noteBlocks, partnerThreshold } from '../../logic/rules';
 import { findingStatus } from '../../logic/checks';
 import { VERIFY_LABELS } from '../../ledger/types';
 import { Badge, Delta, Money, Person, ReasonButton, Ref, SEV_TONE, fmt } from './bits';
+import { DueBadge } from '../views/Inbox';
+import { related } from '../../logic/related';
 import { AdjustForm, AttachForm, JudgmentForm, LinkForm, NoteForm, QuestionForm, VerifyForm } from './actions';
 import { Snippet } from './DocView';
 import type { Note } from '../../ledger/fold';
@@ -78,7 +80,6 @@ function LineTrace({ k }: { k: string }) {
   const diags = v.diagnostics.filter((d) => d.refs.includes(k));
   const foot = footing(l, (x) => m.line(v.version, x)?.value);
   const verifs = wp.verifications.get(k) ?? [];
-  const links = wp.links.filter((x) => x.a === k || x.b === k);
   const rule = m.p.engine_reference.rules[l.rule];
   const notes = wp.notes.filter((n) => n.target.includes(k));
   const qs = wp.questions.filter((q) => q.target.includes(k));
@@ -175,14 +176,7 @@ function LineTrace({ k }: { k: string }) {
       )}
       {js.length > 0 && <div className="blk"><h4>Judgments & elections</h4>{js.map((j) => <div key={j.id} className="logline"><Badge tone="purple">{j.kind.replace('_', ' ')}</Badge> <b>{j.title}</b> — {j.decision} <div className="tiny">Authority: {j.authority}</div></div>)}</div>}
       {atts.length > 0 && <div className="blk"><h4>Evidence attached</h4>{atts.map((a) => <AttachmentRow key={a.id} id={a.id} />)}</div>}
-      <div className="blk">
-        <h4>Related</h4>
-        <div className="chips">
-          {py !== undefined && <Ref r={`py:/return_2024/lines/${k.replace(/\//g, '~1')}`} label={`2024 ${k}: ${fmt(py)}`} />}
-          {links.map((x) => <span key={x.id} className="linkrow"><Ref r={x.a === k ? x.b : x.a} /> <span className="tiny">{x.note}</span></span>)}
-          {m.p.household.related_returns.filter((r) => (k.startsWith('F8812') && /Ada/.test(r.who)) || (k.startsWith('SchE.28A') && /Woodworks/.test(r.who)) || (k.startsWith('SchE.28B') && /Ridgeline/.test(r.who))).map((r) => <span key={r.who} className="badge b-neutral" title={r.return}>Related return: {r.who}</span>)}
-        </div>
-      </div>
+      <Related k={k} />
     </div>
   );
 }
@@ -233,14 +227,15 @@ export function AdjCard({ id }: { id: string }) {
 }
 
 export function NoteThread({ n }: { n: Note }) {
-  const { m, act, me } = useApp();
+  const { m, act, me, wp } = useApp();
   const [reply, setReply] = useState('');
   return (
     <div className={'note ' + n.status + (n.blocking ? ' blocking' : '')}>
       <div className="row">
         <Badge tone={n.kind === 'review' ? 'purple' : n.kind === 'quality' ? 'blue' : 'neutral'}>{n.kind}</Badge>
-        {n.blocking && n.status === 'open' && <Badge tone="red">blocks filing</Badge>}
+        {noteBlocks(n, wp) && <Badge tone="red" title={n.blocking ? 'Flagged as blocking' : 'Firm rule: open review notes block filing'}>blocks filing</Badge>}
         <Badge tone={n.status === 'open' ? 'amber' : 'green'}>{n.status}</Badge>
+        {n.status === 'open' && <DueBadge due={n.due} />}
         <span className="sp" />
         <span className="tiny">{m.staffName(n.by)} · {fmtDate(n.simAt)}{n.assignee ? ` → ${m.staffName(n.assignee)}` : ''}</span>
       </div>
@@ -296,8 +291,9 @@ function EvTrace({ id }: { id: string }) {
       <Snippet evId={id} />
       <div className="actions">
         <button className="btn sm" onClick={() => go(`#/doc/${e.document_id}/${e.page}/${id}`)}>Open document</button>
-        {['verify', 'adjust', 'note', 'attach'].map((p) => <button key={p} className={'btn sm' + (panel === p ? ' on' : '')} onClick={() => setPanel(panel === p ? '' : p)}>{p[0].toUpperCase() + p.slice(1)}</button>)}
+        {['verify', 'adjust', 'note', 'attach', 'link'].map((p) => <button key={p} className={'btn sm' + (panel === p ? ' on' : '')} onClick={() => setPanel(panel === p ? '' : p)}>{p[0].toUpperCase() + p.slice(1)}</button>)}
       </div>
+      {panel === 'link' && <LinkForm from={id} onDone={() => setPanel('')} />}
       {panel === 'verify' && <VerifyForm targets={[id]} onDone={() => setPanel('')} />}
       {panel === 'adjust' && <AdjustForm target={id} area={lineArea(m.line(v.version, lines[0] ?? '') ?? { form: 'X', line: '', key: '' })} from={e.value} onDone={() => setPanel('')} />}
       {panel === 'note' && <NoteForm targets={[id]} onDone={() => setPanel('')} />}
@@ -309,6 +305,31 @@ function EvTrace({ id }: { id: string }) {
       </div>
       <div className="blk"><h4>Verification</h4>{verifs.length === 0 ? <div className="tiny muted">None</div> : verifs.map((x) => <div key={x.id} className="logline">✓ {VERIFY_LABELS[x.method]} — {x.note} <span className="tiny">{m.staffName(x.by)}</span></div>)}</div>
       {adjs.length > 0 && <div className="blk"><h4>Corrections</h4>{adjs.map((a) => <AdjCard key={a.id} id={a.id} />)}</div>}
+      <Related k={id} />
+    </div>
+  );
+}
+
+/** Related items across the return, years and related returns, plus links the team recorded. */
+export function Related({ k }: { k: string }) {
+  const { m, v, wp } = useApp();
+  const [adding, setAdding] = useState(false);
+  const groups = related(m, v, wp, k);
+  return (
+    <div className="blk">
+      <h4>Related <button className="link tiny" onClick={() => setAdding(!adding)}>{adding ? 'cancel' : '+ link an item'}</button></h4>
+      {adding && <LinkForm from={k} onDone={() => setAdding(false)} />}
+      {groups.length === 0 && !adding && <div className="tiny muted">Nothing related recorded.</div>}
+      {groups.map((g) => (
+        <div key={g.title} className="relgroup">
+          <div className="cap">{g.title}</div>
+          {g.items.map((x, i) => (
+            <div key={i} className="linkrow">
+              {x.ref ? <Ref r={x.ref} label={x.label} /> : <b className="tiny">{x.label}</b>} {x.note && <span className="tiny muted">{x.note}</span>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -330,6 +351,7 @@ function Generic({ id }: { id: string }) {
       {r.value !== undefined && typeof r.value !== 'object' && r.kind !== 'qa' && r.kind !== 'msg' && <div className="bigvals"><div><span className="cap">Value</span><b>{fmt(r.value)}</b></div></div>}
       <div className="blk"><h4>Used on the return ({v.version})</h4>{lines.length ? <div className="chips">{lines.map((k) => <Ref key={k} r={k} />)}</div> : <div className="tiny muted">Not cited directly by a return line.</div>}</div>
       {wp.verifications.get(id)?.map((x) => <div key={x.id} className="logline">✓ {x.note}</div>)}
+      <Related k={id} />
     </div>
   );
 }

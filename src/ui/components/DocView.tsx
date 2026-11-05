@@ -4,6 +4,7 @@ import { fmtDateTime, locate, maskIds } from '../../data/model';
 import type { Doc, EV } from '../../data/types';
 import { Badge, Money, Ref, Section, fmt } from './bits';
 import { AttachForm, NoteForm, VerifyForm } from './actions';
+import { Related } from './Inspector';
 import { can } from '../../logic/rules';
 
 /**
@@ -167,6 +168,7 @@ export function DocView({ docId, page: pageProp, focusEv }: { docId: string; pag
             {verifs.map((x) => <div key={x.id} className="logline">✓ {x.method.replace(/_/g, ' ')} — {x.note} <span className="tiny">{m.staffName(x.by)}</span></div>)}
             {atts.map((a) => <div key={a.id} className="logline">📎 {a.name} <span className="tiny">{m.staffName(a.by)}</span></div>)}
             {wp.notes.filter((n) => n.target.includes(docId)).map((n) => <div key={n.id} className="logline">✎ {n.text}</div>)}
+            <Related k={docId} />
           </Section>
         </div>
       </div>

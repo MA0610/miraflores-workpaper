@@ -2,6 +2,8 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Packet } from './data/types';
 import { Store } from './ledger/store';
+import { buildSeed } from './ledger/seed';
+import { Model } from './data/model';
 import { AppProvider } from './ui/ctx';
 import { App } from './ui/App';
 import './styles.css';
@@ -14,7 +16,11 @@ function Boot() {
   useEffect(() => {
     // The packet is loaded exactly as delivered; nothing in it is modified.
     Promise.all([fetch('/packet.json').then((r) => (r.ok ? r.json() : Promise.reject(r.statusText))), store.init()])
-      .then(([p]) => setPacket(p))
+      .then(async ([p]) => {
+        // first visit to a never-used ledger: start from the demo season so the link opens on real work
+        if (store.fresh && !store.events.length) await store.append(buildSeed(new Model(p)));
+        setPacket(p);
+      })
       .catch((e) => setErr(String(e)));
   }, []);
   if (err)

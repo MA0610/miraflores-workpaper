@@ -130,6 +130,7 @@ export function NoteForm({ targets, area, review, onDone }: { targets: string[];
   const [text, setText] = useState('');
   const [blocking, setBlocking] = useState(!!review);
   const [assignee, setAssignee] = useState('');
+  const [due, setDue] = useState('');
   if (!can(me, 'note')) return null;
   const kind = me.role === 'quality_reviewer' ? 'quality' : me.role === 'reviewer' || me.role === 'partner' ? 'review' : 'comment';
   return (
@@ -138,18 +139,19 @@ export function NoteForm({ targets, area, review, onDone }: { targets: string[];
       onSubmit={async (e) => {
         e.preventDefault();
         if (!text.trim()) return;
-        await act('note', targets, { text, area, kind, blocking, assignee: assignee || undefined });
+        await act('note', targets, { text, area, kind, blocking, assignee: assignee || undefined, due: due || undefined });
         setText('');
         onDone?.();
       }}
     >
-      <textarea placeholder={kind === 'review' ? 'Review note…' : 'Note…'} value={text} onChange={(e) => setText(e.target.value)} rows={2} />
+      <textarea placeholder={kind === 'review' ? 'Review note… (@name to mention someone)' : 'Note… (@name to mention someone)'} value={text} onChange={(e) => setText(e.target.value)} rows={2} />
       <div className="row">
         <label className="tiny"><input type="checkbox" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} /> blocks filing until resolved</label>
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)}>
           <option value="">Assign to…</option>
           {m.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        <label className="tiny">Due <input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></label>
         <span className="sp" />
         <button className="btn" type="submit">Add note</button>
       </div>
@@ -161,6 +163,7 @@ export function QuestionForm({ targets, area, preset, onDone }: { targets: strin
   const { act, me, m } = useApp();
   const [to, setTo] = useState(preset?.to ?? 'client');
   const [text, setText] = useState(preset?.text ?? '');
+  const [due, setDue] = useState('');
   if (!can(me, 'question')) return null;
   return (
     <form
@@ -168,7 +171,7 @@ export function QuestionForm({ targets, area, preset, onDone }: { targets: strin
       onSubmit={async (e) => {
         e.preventDefault();
         if (!text.trim()) return;
-        await act('question', targets, { to, text, area });
+        await act('question', targets, { to, text, area, due: due || undefined });
         setText('');
         onDone?.();
       }}
@@ -178,6 +181,7 @@ export function QuestionForm({ targets, area, preset, onDone }: { targets: strin
           <option value="client">Client (portal)</option>
           {m.staff.filter((s) => s.id !== me.id).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
         </select>
+        <label className="tiny">Answer needed by <input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></label>
       </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Question — the answer is filed as evidence on this item" />
       <div className="row"><span className="sp" /><button className="btn" type="submit">Send question</button></div>
@@ -192,7 +196,7 @@ export function AttachForm({ targets, onDone }: { targets: string[]; onDone?: ()
   const [err, setErr] = useState('');
   if (!can(me, 'attach')) return null;
   const onFile = (f: File) => {
-    if (f.size > 1_500_000) return setErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — demo limit is 1.5 MB per file (the ledger stores it inline).`);
+    if (f.size > 1_000_000) return setErr(`${f.name} is ${(f.size / 1e6).toFixed(1)} MB — demo limit is 1 MB per file (the ledger stores it inline).`);
     setErr('');
     const r = new FileReader();
     r.onload = async () => {

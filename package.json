@@ -8,7 +8,12 @@
     "dev:client": "vite",
     "build": "tsc --noEmit && vite build",
     "start": "node server/server.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cf:dev": "npm run build && wrangler d1 migrations apply workpaper-ledger --local && wrangler pages dev",
+    "cf:db:create": "wrangler d1 create workpaper-ledger",
+    "cf:db:migrate": "wrangler d1 migrations apply workpaper-ledger --remote",
+    "cf:deploy": "npm run build && wrangler pages deploy --branch main",
+    "cf:project:create": "wrangler pages project create okafor-lindqvist-workpaper --production-branch main"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -20,7 +25,8 @@
     "@vitejs/plugin-react": "4.3.4",
     "concurrently": "9.1.0",
     "typescript": "5.6.3",
-    "vite": "5.4.11"
+    "vite": "5.4.11",
+    "wrangler": "4.20.0"
   },
   "engines": {
     "node": ">=18"

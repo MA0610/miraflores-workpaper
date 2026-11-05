@@ -1,0 +1,11 @@
+# Cloudflare Pages (free plan): static app from dist/ + functions/api (Pages Functions) + a D1 database.
+# Deploy steps are in README.md ("Deploy (free)"). database_id is filled in after `npm run cf:db:create`.
+name = "okafor-lindqvist-workpaper"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "workpaper-ledger"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
